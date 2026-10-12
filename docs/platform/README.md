@@ -21,7 +21,7 @@ The Render web service uses `backend` as its Root Directory, `npm install && npm
 
 - `FIREBASE_PROJECT_ID=developify-5615a`
 - `FIREBASE_STORAGE_BUCKET` to the bucket name shown in Firebase Console if Storage is enabled with approved billing
-- `FIREBASE_SERVICE_ACCOUNT_JSON` as a Render secret, or use Google Application Default Credentials where supported
+- a Firebase Admin service-account JSON uploaded as a Render secret file, with `FIREBASE_SERVICE_ACCOUNT_PATH` set to `/etc/secrets/<filename>`; alternatively, set `FIREBASE_SERVICE_ACCOUNT_JSON` as a Render secret or use Google Application Default Credentials where supported
 - `ADMIN_ORIGIN` to the deployed admin origin (comma-separated if multiple origins are needed)
 - `API_PUBLIC_URL` to the Render HTTPS URL
 
