@@ -1,104 +1,36 @@
 # Developify Platform
 
-Production backend, admin dashboard, and Flutter API integration for Developify Mobile.
+Developify consists of a Flutter mobile app, a NestJS API, and a Next.js admin dashboard. Firebase Authentication provides identity and Cloud Firestore stores application data. Firebase Storage is the intended document store, but this project's Storage service is not enabled. The API does not use PostgreSQL, Redis, or S3.
 
-## Layout
+## Local API
 
-| Path | Role |
-| --- | --- |
-| `developify-mobile/` | Accepted Flutter app (UI preserved). Mock repos by default; API adapters when `MOCK_MODE=false` |
-| `backend/` | NestJS API + Prisma + PostgreSQL |
-| `admin/` | Next.js operations dashboard |
-| `docs/platform/` | Platform runbooks |
+1. In Firebase Console, select project `developify-5615a`, confirm Email/Password sign-in is enabled, and confirm the existing Firestore database. Do not create a replacement database.
+2. Copy `backend/.env.example` to `backend/.env`. Configure `FIREBASE_PROJECT_ID` and server-only Firebase credentials. Set `FIREBASE_STORAGE_BUCKET` only if Storage is later enabled. For a local service-account file, keep it outside the repository and set `FIREBASE_SERVICE_ACCOUNT_PATH`.
+3. In `backend`, install dependencies and run `npm run start:dev`. No SQL migration or seed command is required.
+4. Start the admin dashboard with `npm run dev -- --port 3001` from `admin`; its local Firebase configuration defaults to `developify-5615a`.
 
-## Quick start (local)
+The API listens on port 3000 at `/v1`; Swagger is at `/docs`. For Flutter live mode, set `MOCK_MODE=false`, `FIREBASE_ENABLED=true`, and `API_BASE_URL` to the API URL.
 
-### 1. Infrastructure
+## Firebase configuration deployment
 
-```sh
-cd backend
-docker compose up -d postgres redis minio mailhog
-```
+The Firebase CLI configuration, Firestore rules, and indexes are in `developify-mobile`. Before deploying, compare `firestore.rules` with the rules currently published in Firebase Console: `firebase deploy --only firestore --project developify-5615a` replaces the deployed rules and indexes for this project. The checked-in rules deny client writes and allow an authenticated user to read only their own `/users/{uid}` document. The Admin SDK used by the backend operates under its service-account IAM permissions and does not rely on client Firestore rules.
 
-### 2. API
+## Render API deployment
 
-```sh
-cd backend
-cp .env.example .env   # or use committed .env for local defaults
-npm install
-npx prisma migrate deploy
-npm run prisma:seed
-npm run start:dev
-```
+The Render web service uses `backend` as its Root Directory, `npm install && npm run build` as its build command, and `npm run start:prod` as its start command. Set `PORT` through Render and configure:
 
-API: `http://localhost:3000/v1`  
-Swagger: `http://localhost:3000/docs`  
-Mailhog UI: `http://localhost:8025`
+- `FIREBASE_PROJECT_ID=developify-5615a`
+- `FIREBASE_STORAGE_BUCKET` to the bucket name shown in Firebase Console if Storage is enabled with approved billing
+- `FIREBASE_SERVICE_ACCOUNT_JSON` as a Render secret, or use Google Application Default Credentials where supported
+- `ADMIN_ORIGIN` to the deployed admin origin (comma-separated if multiple origins are needed)
+- `API_PUBLIC_URL` to the Render HTTPS URL
 
-Seeded accounts:
+Firebase Storage is not currently enabled for this project; the console says a Blaze billing account is required. Do not upgrade billing without the owner's approval. Until Storage is enabled and `FIREBASE_STORAGE_BUCKET` is set, document uploads will return an explicit service-unavailable response. Never place a service-account key in the mobile app, admin bundle, Git, or a build-time variable.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@developify.co.za` | `Developify@Admin1` |
-| Investor | `investor.qa@developify.co.za` | `Developify@123` (PIN `1234`, investor ID `1000001`) |
-| Landowner | `landowner.qa@developify.co.za` | `Developify@123` (investor ID `1000002`) |
+## Vercel admin deployment
 
-### 3. Admin
+Use `admin` as the Root Directory and `npm run build` as the build command. Set `NEXT_PUBLIC_API_URL` to the Render API URL ending in `/v1`. The client Firebase settings use `NEXT_PUBLIC_FIREBASE_*` variables and default to the public app configuration for `developify-5615a`. After deployment, set Render's `ADMIN_ORIGIN` to the actual Vercel origin and redeploy the API so browser requests pass CORS.
 
-```sh
-cd admin
-npm install
-npm run dev -- --port 3001
-```
+## Operational limits
 
-Open `http://localhost:3001` and sign in with the admin credentials.
-
-### 4. Flutter (live API)
-
-```sh
-cd developify-mobile
-flutter run --target lib/main.dart \
-  --dart-define=MOCK_MODE=false \
-  --dart-define=API_BASE_URL=http://10.0.2.2:3000 \
-  --dart-define=FIREBASE_ENABLED=false \
-  --dart-define=TELEMETRY_ENABLED=false \
-  --dart-define=ONESIGNAL_APP_ID=
-```
-
-Use `http://localhost:3000` on iOS simulator / desktop, or `http://10.0.2.2:3000` on Android emulator.
-
-Keep `MOCK_MODE=true` (default) for offline demo and the maintained test suite.
-
-## Security notes
-
-- Firebase Authentication is being introduced as the identity provider; Firebase Admin credentials must be injected into the API from Secret Manager (or supplied through Google Cloud Application Default Credentials). For local development, `FIREBASE_SERVICE_ACCOUNT_PATH` may point to a downloaded service-account JSON file stored outside this repository. Never put service-account credentials in mobile, admin, source control, or build-time defines.
-- Access JWT + rotating refresh tokens
-- Argon2id password hashes
-- Rate-limited auth/OTP
-- Financial writes require PIN and idempotency keys
-- Cards are not stored (Paystack adapter stub)
-- KYC review is admin-driven (Smile ID adapter stub)
-- Audit log for admin and financial actions
-
-## Provider adapters (Phase 1 stubs)
-
-- `PaymentProvider` → `ManualPaymentProvider` (EFT + admin confirm)
-- `ManualKycProvider` → admin queue approve/correct
-
-Swap implementations when provider credentials are available. Until then the admin integration status is **not configured**. A sandbox check must stay labelled synthetic and must not authorise a real-money deposit or investment.
-
-Wallet funding (`POST` add-money) is rejected unless the investor entity `verificationStatus` is `verified`. A pending top-up is not a cleared deposit. The deposit reference is the seven-digit investor ID plus a short suffix so the unique transaction reference can repeat for the same investor. Admin deposit confirmation is still a manual control, not a bank callback.
-
-New ledger batches must balance to zero cents. The existing seed credits the QA wallet with a single-sided entry; correct that with an authorised reversing pair rather than editing the posted row.
-
-`GET /admin/users` returns investor ID and verification status and omits password and PIN hashes.
-
-## Production blockers (28 Sep 2026)
-
-These were checked in this workspace and are still open:
-
-- Docker was not running, so `prisma migrate deploy` could not apply `20260928130000_investor_number`.
-- Mobile still defaults to `MOCK_MODE=true`.
-- Privileged MFA, maker-checker, and roles beyond admin / ops / compliance are not implemented.
-- Live KYC, card payments, and SMS providers have no credentials and no verified webhooks.
-- Regulatory classification (POPIA, FICA, FSCA / CIS / FAIS, e-signatures) is not established by this software.
+Payments and KYC are manual phase-one workflows. A deployed service is not evidence that live-money payment, KYC, email, or regulatory integrations are configured or approved.

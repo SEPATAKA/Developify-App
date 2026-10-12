@@ -9,8 +9,8 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { ProjectStatus, PropertyStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { ProjectStatus, PropertyStatus } from '../../firebase/domain.enums';
 import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
 import { firestoreDate } from '../../firebase/firestore-date';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';

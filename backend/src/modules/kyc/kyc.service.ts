@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EntityType, VerificationStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { EntityType, VerificationStatus } from '../../firebase/domain.enums';
 import type {
   DocumentData,
   QueryDocumentSnapshot,

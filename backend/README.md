@@ -47,21 +47,30 @@ entries, and related records are committed atomically. Admins need an
 `role` (`admin`, `ops`, or `compliance`); a verified first sign-in links its
 Firebase UID. Create the Firebase Authentication admin account and
 `adminUsers/{id}` document before granting access. The document should contain
-`email`, `name`, `role`, and `locked`; for existing PostgreSQL-backed admin
-actions, keep `{id}` equal to the corresponding existing admin ID so audit
-references remain valid. Landowner profile creation accepts a valid Firebase
-identity, but sign-in is blocked until Firebase confirms email verification.
+`email`, `name`, `role`, and `locked`. Landowner profile creation accepts a
+valid Firebase identity, but sign-in is blocked until Firebase confirms email
+verification.
 Investor profile creation requires that verification up front. Both create
 the profile documents in a Firestore transaction.
 
-Runtime API modules no longer connect to PostgreSQL. Prisma files remain in
-the repository for legacy schema/seed tooling but are not imported by the
-application module.
+Application data and document uploads use Cloud Firestore and Firebase
+Storage. The API has no PostgreSQL, Prisma, Redis, or S3 runtime dependency.
+Document uploads require Firebase Storage to be enabled; this project currently
+requires a Blaze billing account for Storage. Do not enable billing without
+approval. Once enabled, set `FIREBASE_STORAGE_BUCKET` and grant the service
+account permission to create signed upload URLs.
 
-Deploy Firestore rules and required composite indexes from `developify-mobile`
-with `firebase deploy --only firestore`. Never use a service-account key that
-has been shared or committed; revoke exposed keys in Google Cloud IAM and
-configure a newly issued credential outside the repository.
+Before deploying Firestore rules and indexes from `developify-mobile`, compare
+them with the current Firebase Console configuration. Deployment replaces the
+published rules and indexes:
+
+```bash
+firebase deploy --only firestore --project developify-5615a
+```
+
+Never use a service-account key that has been shared or committed; revoke
+exposed keys in Google Cloud IAM and configure a newly issued credential
+outside the repository.
 
 ## Project setup
 

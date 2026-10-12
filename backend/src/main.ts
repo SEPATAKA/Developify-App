@@ -12,6 +12,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix('v1');
 
+  const allowedOrigins = new Set(
+    (process.env.ADMIN_ORIGIN ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  );
+
   app.enableCors({
     origin: (
       origin: string | undefined,
@@ -19,6 +26,7 @@ async function bootstrap() {
     ) => {
       if (
         !origin ||
+        allowedOrigins.has(origin) ||
         /^http:\/\/localhost:\d+$/.test(origin) ||
         /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)
       ) {
@@ -75,7 +83,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT || 3000);
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   console.log(`Developify API listening on :${port}`);
 }

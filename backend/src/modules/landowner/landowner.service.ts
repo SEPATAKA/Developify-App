@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PropertyStatus } from '@prisma/client';
+import { PropertyStatus } from '../../firebase/domain.enums';
 import { randomUUID } from 'node:crypto';
 import type { DocumentData } from 'firebase-admin/firestore';
 import { FirebaseAdminService } from '../../firebase/firebase-admin.service';

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
-import { EntityType } from '@prisma/client';
+import { EntityType } from '../../firebase/domain.enums';
 import { KycService } from './kyc.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
 

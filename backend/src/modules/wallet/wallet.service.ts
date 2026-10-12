@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash, randomUUID } from 'crypto';
 import {
   InvestmentStatus,
   LedgerAccountType,
@@ -11,8 +12,7 @@ import {
   TransactionKind,
   TransactionStatus,
   VerificationStatus,
-} from '@prisma/client';
-import { createHash, randomUUID } from 'crypto';
+} from '../../firebase/domain.enums';
 import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
 import { firestoreDate } from '../../firebase/firestore-date';
 import { LedgerService } from '../ledger/ledger.service';

@@ -3,8 +3,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { LedgerAccountType } from '@prisma/client';
 import type { Transaction } from 'firebase-admin/firestore';
+import { LedgerAccountType } from '../../firebase/domain.enums';
 import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
 import { assertBalancedLedger } from './ledger.utils';
 

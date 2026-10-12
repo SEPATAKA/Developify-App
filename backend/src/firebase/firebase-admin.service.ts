@@ -25,6 +25,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore';
+import { getStorage, type Storage } from 'firebase-admin/storage';
 
 export type RegisteredUserProfile = {
   uid: string;
@@ -58,6 +59,10 @@ export class FirebaseAdminService {
 
   get firestore(): Firestore {
     return getFirestore(this.app);
+  }
+
+  get storage(): Storage {
+    return getStorage(this.app);
   }
 
   async findProfileByEmail(collection: 'users' | 'adminUsers', email: string) {

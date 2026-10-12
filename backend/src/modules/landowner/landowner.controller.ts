@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
-import { PropertyStatus } from '@prisma/client';
+import { PropertyStatus } from '../../firebase/domain.enums';
 import { LandownerService } from './landowner.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
 
