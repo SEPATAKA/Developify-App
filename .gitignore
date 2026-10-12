@@ -1,0 +1,31 @@
+# Ignore nested Git repositories
+**/.git/
+.git/
+
+# Flutter generated files
+**/.dart_tool/
+**/build/
+**/.gradle/
+**/node_modules/
+**/dist/
+**/.next/
+**/coverage/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
+# Local backups
+backup-*/
+
+# Generated Flutter integration state
+**/ios/Flutter/ephemeral/
+
+# Secrets
+**/.env
+**/.env.*
+!**/.env.example
+developify-mobile/test/helpers/qa_credentials.dart
+
+# Local diagnostics
+**/test_output.txt
+**/*.log
+**/.DS_Store
