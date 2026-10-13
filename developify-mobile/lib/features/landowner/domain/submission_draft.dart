@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
 final class LocalAttachment {
@@ -5,10 +7,18 @@ final class LocalAttachment {
     required this.id,
     required this.name,
     this.bytes = 120000,
+    this.mimeType = 'application/pdf',
+    this.storageKey,
+    this.documentKey,
+    this.previewBytes,
   });
   final String id;
   final String name;
   final int bytes;
+  final String mimeType;
+  final String? storageKey;
+  final String? documentKey;
+  final Uint8List? previewBytes;
 }
 
 final class SubmissionDraft {

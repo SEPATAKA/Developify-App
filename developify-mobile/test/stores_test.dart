@@ -266,6 +266,7 @@ void main() {
       expect(first.twoFactorEnabled, false);
       first.setCode('123456');
       expect(await first.perform('verify-code'), true);
+      await Future<void>.delayed(Duration.zero);
       first.dispose();
       final second = SecurityStore(repository);
       expect(second.biometrics['Use for login'], true);

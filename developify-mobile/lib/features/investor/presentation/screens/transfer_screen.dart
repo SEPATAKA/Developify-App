@@ -102,46 +102,54 @@ class _TransferScreenState extends State<TransferScreen> {
           key: const ValueKey('transfer-payment-type'),
           children: [
             SizedBox(height: 18.w),
-            Text('How will you pay?', style: AppTextStyles.heading),
+            Text(
+              store.supportsManualEft
+                  ? 'Add funds by bank transfer'
+                  : 'How will you pay?',
+              style: AppTextStyles.heading,
+            ),
             SizedBox(height: 17.w),
             Text(
-              'Easily add funds to your account and keep your balance ready for everyday transactions.',
+              store.supportsManualEft
+                  ? 'Create a deposit request, then transfer the exact amount using the reference provided. Funds are added after admin confirmation.'
+                  : 'Easily add funds to your account and keep your balance ready for everyday transactions.',
               style: AppTextStyles.body,
             ),
             SizedBox(height: 18.w),
-            InvestorMenuRow(
-              icon: AppAssets.investorTransferCard,
-              radius: 12,
-              padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 15.w),
-              iconGap: 16,
-              subtitleGap: 4,
-              title: 'Debit Card',
-              titleSize: 16,
-              subtitleSize: 14,
-              subtitleColor: AppColors.iconMuted,
-              subtitleWeight: FontWeight.w500,
-              badge: Container(
-                constraints: BoxConstraints(minWidth: 91.w),
-                padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.w),
-                decoration: BoxDecoration(
-                  color: AppColors.mintBorder,
-                  borderRadius: BorderRadius.circular(20.r),
-                ),
-                child: Text(
-                  'Most popular',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.text(
-                    11,
-                    color: AppColors.mintText,
-                    weight: FontWeight.w600,
+            if (!store.supportsManualEft)
+              InvestorMenuRow(
+                icon: AppAssets.investorTransferCard,
+                radius: 12,
+                padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 15.w),
+                iconGap: 16,
+                subtitleGap: 4,
+                title: 'Debit Card',
+                titleSize: 16,
+                subtitleSize: 14,
+                subtitleColor: AppColors.iconMuted,
+                subtitleWeight: FontWeight.w500,
+                badge: Container(
+                  constraints: BoxConstraints(minWidth: 91.w),
+                  padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.w),
+                  decoration: BoxDecoration(
+                    color: AppColors.mintBorder,
+                    borderRadius: BorderRadius.circular(20.r),
+                  ),
+                  child: Text(
+                    'Most popular',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.text(
+                      11,
+                      color: AppColors.mintText,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
+                subtitle: 'Instant • 1.5% fee',
+                trailing: const AppIcon(AppAssets.profileMenuChevron),
+                onTap: () => store.chooseKind(PaymentMethodKind.card),
               ),
-              subtitle: 'Instant • 1.5% fee',
-              trailing: const AppIcon(AppAssets.profileMenuChevron),
-              onTap: () => store.chooseKind(PaymentMethodKind.card),
-            ),
-            SizedBox(height: 19.w),
+            if (!store.supportsManualEft) SizedBox(height: 19.w),
             InvestorMenuRow(
               icon: AppAssets.investorBank,
               iconGap: 16,
@@ -153,9 +161,13 @@ class _TransferScreenState extends State<TransferScreen> {
               subtitleSize: 14,
               subtitleColor: AppColors.iconMuted,
               subtitleWeight: FontWeight.w500,
-              subtitle: 'Instant • No Fee',
+              subtitle: store.supportsManualEft
+                  ? 'Manual EFT • Pending admin confirmation'
+                  : 'Instant • No Fee',
               trailing: const AppIcon(AppAssets.profileMenuChevron),
-              onTap: store.showBankDetails,
+              onTap: store.supportsManualEft
+                  ? () => store.chooseKind(PaymentMethodKind.bankAccount)
+                  : store.showBankDetails,
             ),
           ],
         ),
@@ -167,9 +179,17 @@ class _TransferScreenState extends State<TransferScreen> {
     if (!store.methods.any((method) => method.kind == store.paymentKind) &&
         store.stage == TransferStage.amount) {
       return InvestorPage(
-        title: withdrawal ? 'Withdraw' : 'Pay with Card',
+        title: withdrawal
+            ? 'Withdraw'
+            : store.supportsManualEft
+            ? 'Bank Transfer'
+            : 'Pay with Card',
         onBack: _back,
-        child: EmptyPaymentMethods(withdrawal: withdrawal, onAdd: _addMethod),
+        child: EmptyPaymentMethods(
+          withdrawal: withdrawal,
+          manualEft: store.supportsManualEft,
+          onAdd: _addMethod,
+        ),
       );
     }
     final bankDeposit =
@@ -276,7 +296,12 @@ class _TransferScreenState extends State<TransferScreen> {
               bankDeposit: bankDeposit,
             ),
           ] else
-            TransferReview(amount: amount, fee: store.fee, method: method),
+            TransferReview(
+              amount: amount,
+              fee: store.fee,
+              method: method,
+              manualEft: store.supportsManualEft && !withdrawal,
+            ),
           if (store.error != null) InlineError(store.error),
           SizedBox(height: 24.w),
         ],
@@ -312,7 +337,7 @@ class _TransferScreenState extends State<TransferScreen> {
         'select': 'true',
         'kind': widget.store.kind == InvestorTransferKind.withdrawal
             ? 'bankAccount'
-            : 'card',
+            : widget.store.paymentKind.name,
       },
     );
     if (mounted && id != null) {
@@ -325,7 +350,9 @@ class _TransferScreenState extends State<TransferScreen> {
     final id = await context.pushNamed<String>(
       widget.store.kind == InvestorTransferKind.withdrawal
           ? InvestorRoutes.addBank
-          : InvestorRoutes.addCard,
+          : widget.store.cardPaymentsEnabled
+          ? InvestorRoutes.addCard
+          : InvestorRoutes.addBank,
       queryParameters: const {'select': 'true'},
     );
     if (mounted && id != null) {
@@ -345,9 +372,14 @@ class _TransferScreenState extends State<TransferScreen> {
           ? 'Recording withdrawal'
           : 'Processing your request',
       processingMessage: withdrawal
-          ? 'Please wait while we record this simulated withdrawal.'
+          ? store.supportsManualEft
+                ? 'Please wait while we submit your withdrawal for admin approval.'
+                : 'Please wait while we record this simulated withdrawal.'
+          : store.supportsManualEft
+          ? 'Please wait while we create your manual EFT deposit request.'
           : 'Please wait while we confirm this simulation.',
       processingBottomSpacing: withdrawal ? 106 : 39,
+      allowDemoBiometricAuthorization: store.allowDemoBiometricAuthorization,
       authorize: (pin, {simulateBiometric = false}) async {
         if (await store.confirm(pin, simulateBiometric: simulateBiometric)) {
           return InvestorAuthorizationOutcome.success;
@@ -364,6 +396,28 @@ class _TransferScreenState extends State<TransferScreen> {
       return;
     }
     final receiptId = store.receipt?.transactionId;
+    final receipt = store.receipt;
+    final instructions = receipt?.paymentInstructions;
+    final isPending = receipt?.status == InvestorTransactionStatus.pending;
+    final liveManualDeposit = !withdrawal && store.supportsManualEft;
+    final manualDepositAmount = instructions == null
+        ? null
+        : MonetaryAmount(instructions.amountCents, Currency.zar);
+    final message = !success
+        ? store.error ?? 'Please try again.'
+        : withdrawal
+        ? store.supportsManualEft
+              ? isPending
+                    ? '${Money.amount(store.amount!)} withdrawal request submitted to ${destination?.name ?? 'your bank account'}${destination == null ? '' : ' • ${destination.lastFour}'}. It is pending admin approval; the amount and fee are reserved from your wallet.'
+                    : '${Money.amount(store.received)} withdrawal sent to ${destination?.name ?? 'your bank account'}${destination == null ? '' : ' • ${destination.lastFour}'}.'
+              : '${Money.amount(store.received)} simulated withdrawal to ${destination?.name ?? 'the selected bank'}${destination == null ? '' : ' • ${destination.lastFour}'}. No money was moved.'
+        : liveManualDeposit && isPending && instructions != null
+        ? 'Deposit request pending. Transfer ${Money.amount(manualDepositAmount!)} to ${instructions.bank}, account ${instructions.accountNumber}, branch ${instructions.branchCode}. Use reference ${instructions.reference}. Your wallet is credited after admin confirmation.'
+        : liveManualDeposit && isPending
+        ? 'This deposit request is still pending. Check the transaction details or contact support for its bank-transfer reference before sending funds.'
+        : liveManualDeposit
+        ? 'Deposit confirmed. Your wallet has been credited.'
+        : '${Money.amount(store.amount!)} added to your demo wallet.';
     final choice = await showInvestorResult(
       context,
       success: success,
@@ -374,16 +428,18 @@ class _TransferScreenState extends State<TransferScreen> {
           : InvestorResultStyle.investment,
       title: success
           ? withdrawal
-                ? 'Withdrawal Sent'
+                ? isPending
+                      ? 'Withdrawal Requested'
+                      : 'Withdrawal Sent'
+                : liveManualDeposit
+                ? 'Deposit Request Pending'
                 : 'Top - up Successful'
           : 'Couldn’t complete',
-      message: success
-          ? withdrawal
-                ? '${Money.amount(store.received)} simulated withdrawal to ${destination?.name ?? 'the selected bank'}${destination == null ? '' : ' • ${destination.lastFour}'}. No money was moved.'
-                : '${Money.amount(store.amount!)} added to your demo wallet.'
-          : store.error ?? 'Please try again.',
+      message: message,
       primary: success
           ? withdrawal
+                ? 'Back to Wallet'
+                : liveManualDeposit
                 ? 'Back to Wallet'
                 : widget.returnProjectId != null
                 ? 'Return to investment'
@@ -391,13 +447,19 @@ class _TransferScreenState extends State<TransferScreen> {
           : 'Try again',
       secondary: success
           ? withdrawal
-                ? 'View Receipt'
+                ? store.supportsManualEft && isPending
+                      ? 'View Request'
+                      : 'View Receipt'
+                : liveManualDeposit
+                ? 'View Request'
                 : 'Back to Wallet'
           : null,
     );
     if (!mounted) return;
     if (success) {
-      if (withdrawal && choice == 'secondary' && receiptId != null) {
+      if ((withdrawal || liveManualDeposit) &&
+          choice == 'secondary' &&
+          receiptId != null) {
         context.pushReplacementNamed(
           InvestorRoutes.transaction,
           pathParameters: {'id': receiptId},
@@ -405,6 +467,7 @@ class _TransferScreenState extends State<TransferScreen> {
         return;
       }
       if (!withdrawal &&
+          !liveManualDeposit &&
           choice == 'primary' &&
           widget.returnProjectId != null) {
         context.goNamed(
@@ -418,7 +481,7 @@ class _TransferScreenState extends State<TransferScreen> {
         return;
       }
       context.goNamed(
-        !withdrawal && choice == 'primary'
+        !withdrawal && !liveManualDeposit && choice == 'primary'
             ? InvestorRoutes.explore
             : InvestorRoutes.wallet,
       );

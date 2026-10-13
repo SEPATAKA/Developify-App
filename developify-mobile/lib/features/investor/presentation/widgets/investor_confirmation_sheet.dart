@@ -19,6 +19,7 @@ Future<bool?> showInvestorAuthorization(
   String processingTitle = 'Processing your request',
   String processingMessage = 'Please wait while we confirm this simulation.',
   double processingBottomSpacing = 39,
+  bool allowDemoBiometricAuthorization = true,
 }) => showModalBottomSheet<bool>(
   context: context,
   isScrollControlled: true,
@@ -35,6 +36,7 @@ Future<bool?> showInvestorAuthorization(
     processingTitle: processingTitle,
     processingMessage: processingMessage,
     processingBottomSpacing: processingBottomSpacing,
+    allowDemoBiometricAuthorization: allowDemoBiometricAuthorization,
   ),
 );
 
@@ -45,6 +47,7 @@ class _AuthorizationSheet extends StatefulWidget {
     required this.processingTitle,
     required this.processingMessage,
     required this.processingBottomSpacing,
+    required this.allowDemoBiometricAuthorization,
   });
   final Future<InvestorAuthorizationOutcome> Function(
     String, {
@@ -55,6 +58,7 @@ class _AuthorizationSheet extends StatefulWidget {
   final String processingTitle;
   final String processingMessage;
   final double processingBottomSpacing;
+  final bool allowDemoBiometricAuthorization;
   @override
   State<_AuthorizationSheet> createState() => _AuthorizationSheetState();
 }
@@ -64,6 +68,12 @@ class _AuthorizationSheetState extends State<_AuthorizationSheet> {
   bool _usePin = false;
   bool _busy = false;
   String? _error;
+  @override
+  void initState() {
+    super.initState();
+    _usePin = !widget.allowDemoBiometricAuthorization;
+  }
+
   Future<void> _submit(String pin, {bool simulateBiometric = false}) async {
     if (_busy) return;
     setState(() {
@@ -164,7 +174,7 @@ class _AuthorizationSheetState extends State<_AuthorizationSheet> {
               ),
             if (_busy)
               SizedBox(height: widget.processingBottomSpacing.w)
-            else if (!_usePin) ...[
+            else if (!_usePin && widget.allowDemoBiometricAuthorization) ...[
               SizedBox(height: 39.w),
               Semantics(
                 button: true,
@@ -223,6 +233,7 @@ class _AuthorizationSheetState extends State<_AuthorizationSheet> {
               SizedBox(height: 62.w),
               _PinPad(
                 onDigit: _digit,
+                allowBiometric: widget.allowDemoBiometricAuthorization,
                 onBiometric: () => setState(() => _usePin = false),
                 onDelete: () {
                   if (_pin.isNotEmpty) {
@@ -274,10 +285,12 @@ class _PinPad extends StatelessWidget {
     required this.onDigit,
     required this.onBiometric,
     required this.onDelete,
+    required this.allowBiometric,
   });
   final ValueChanged<String> onDigit;
   final VoidCallback onBiometric;
   final VoidCallback onDelete;
+  final bool allowBiometric;
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: AppColors.slate100,
@@ -301,7 +314,9 @@ class _PinPad extends StatelessWidget {
                           onPressed: row < 3
                               ? () => onDigit('${row * 3 + column + 1}')
                               : column == 0
-                              ? onBiometric
+                              ? allowBiometric
+                                    ? onBiometric
+                                    : null
                               : column == 1
                               ? () => onDigit('0')
                               : onDelete,
@@ -313,7 +328,9 @@ class _PinPad extends StatelessWidget {
                               side: const BorderSide(color: AppColors.slate200),
                             ),
                           ),
-                          child: row == 3 && column != 1
+                          child: row == 3 && column == 0 && !allowBiometric
+                              ? const SizedBox.shrink()
+                              : row == 3 && column != 1
                               ? AppIcon(
                                   column == 0
                                       ? AppAssets.investorPinBiometric

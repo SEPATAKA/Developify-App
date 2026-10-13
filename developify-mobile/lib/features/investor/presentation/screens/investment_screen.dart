@@ -313,8 +313,10 @@ class InvestmentScreen extends StatelessWidget {
       },
       error: () => store.error,
       processingTitle: 'Processing your\ninvestment',
-      processingMessage:
-          'Allocating simulated funds to this project. No real money is moved.',
+      processingMessage: store.allowDemoBiometricAuthorization
+          ? 'Allocating simulated funds to this project. No real money is moved.'
+          : 'Submitting your investment against your verified wallet balance.',
+      allowDemoBiometricAuthorization: store.allowDemoBiometricAuthorization,
     );
     if (!context.mounted) return;
     if (success == null) {
@@ -326,7 +328,9 @@ class InvestmentScreen extends StatelessWidget {
       success: success,
       title: success ? 'You’re an investor!' : 'Couldn’t complete',
       message: success
-          ? '${Money.amount(store.amount!, decimals: false)} invested in ${store.project!.name} in this demo. View your portfolio for updates.'
+          ? store.allowDemoBiometricAuthorization
+                ? '${Money.amount(store.amount!, decimals: false)} invested in ${store.project!.name} in this demo. View your portfolio for updates.'
+                : '${Money.amount(store.amount!, decimals: false)} invested in ${store.project!.name}. View your portfolio for the confirmed holding.'
           : store.error ?? 'Please try again.',
       primary: success ? 'View my portfolio' : 'Top up wallet',
       secondary: success ? 'Find another project' : 'Adjust amount',

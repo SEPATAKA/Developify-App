@@ -22,6 +22,9 @@ abstract interface class InvestorCatalogRepository {
 
 abstract interface class InvestorAccountRepository {
   Stream<InvestorAccountChange> get changes;
+  Set<PaymentMethodKind> get supportedPaymentMethods;
+  bool get supportsManualEft;
+  bool get allowsDemoBiometricAuthorization;
   bool get balanceVisible;
   void setBalanceVisible(bool visible);
   Future<Result<InvestorAccountSnapshot>> snapshot();

@@ -1,3 +1,4 @@
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
@@ -8,12 +9,14 @@ final class PayoutAccount {
     required this.type,
     required this.branchCode,
     required this.holder,
+    this.proofKey,
   });
   final String bank;
   final String number;
   final String type;
   final String branchCode;
   final String holder;
+  final String? proofKey;
   String get lastFour =>
       number.length > 4 ? number.substring(number.length - 4) : number;
 }
@@ -44,13 +47,18 @@ abstract interface class ProfileRepository {
   void clearSession();
   Stream<SecurityPreferences> get securityChanges;
   SecurityPreferences get securityPreferences;
-  void saveSecurityPreferences(SecurityPreferences value);
+  Future<Result<void>> saveSecurityPreferences(SecurityPreferences value);
   Future<Result<AppUser>> load();
   Future<Result<AppUser>> update(AppUser user);
   PayoutAccount? get payoutAccount;
   ProfilePreferences get preferences;
   Future<Result<void>> updatePreferences(ProfilePreferences preferences);
   Future<Result<void>> updatePayout(PayoutAccount account);
+  Future<Result<String>> uploadFile(
+    PickedLocalFile file, {
+    required String prefix,
+  });
+  Future<Result<void>> deleteFile(String storageKey);
   Future<Result<void>> updateSecurity(String action, {String? pin});
 }
 

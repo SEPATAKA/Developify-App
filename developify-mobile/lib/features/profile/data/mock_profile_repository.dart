@@ -4,6 +4,7 @@ import 'package:developify_mobile/core/services/transaction_authorization.dart';
 import 'package:developify_mobile/core/services/mock_request_scope.dart';
 import 'package:developify_mobile/core/services/mock_behavior.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/profile/domain/profile_repository.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
@@ -26,11 +27,13 @@ final class MockProfileRepository implements ProfileRepository {
   @override
   Stream<SecurityPreferences> get securityChanges => _securityChanges.stream;
   @override
-  void saveSecurityPreferences(SecurityPreferences value) {
+  Future<Result<void>> saveSecurityPreferences(
+    SecurityPreferences value,
+  ) => _run(() {
     if (_securityChanges.isClosed) return;
     _security = value;
     _securityChanges.add(value);
-  }
+  });
 
   @override
   void dispose() {
@@ -51,7 +54,8 @@ final class MockProfileRepository implements ProfileRepository {
   @override
   void clearSession() {
     _requests.cancel();
-    saveSecurityPreferences(const SecurityPreferences());
+    _security = const SecurityPreferences();
+    if (!_securityChanges.isClosed) _securityChanges.add(_security);
     _preferences = const ProfilePreferences();
     _freshPayout = null;
     _account = behavior.empty ? null : _initialAccount;
@@ -111,6 +115,16 @@ final class MockProfileRepository implements ProfileRepository {
       _account = account;
     }
   });
+  @override
+  Future<Result<String>> uploadFile(
+    PickedLocalFile file, {
+    required String prefix,
+  }) => _run(
+    () => '$prefix/mock-${DateTime.now().microsecondsSinceEpoch}-${file.name}',
+  );
+
+  @override
+  Future<Result<void>> deleteFile(String storageKey) => _run(() {});
   @override
   Future<Result<void>> updateSecurity(String action, {String? pin}) async {
     if (action == 'change-pin' &&

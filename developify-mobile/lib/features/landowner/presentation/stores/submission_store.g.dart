@@ -114,6 +114,48 @@ mixin _$SubmissionStore on SubmissionStoreBase, Store {
     });
   }
 
+  late final _$uploadDocumentAsyncAction = AsyncAction(
+    'SubmissionStoreBase.uploadDocument',
+    context: context,
+  );
+
+  @override
+  Future<bool> uploadDocument(String key, PickedLocalFile file) {
+    return _$uploadDocumentAsyncAction.run(
+      () => super.uploadDocument(key, file),
+    );
+  }
+
+  late final _$uploadPhotoAsyncAction = AsyncAction(
+    'SubmissionStoreBase.uploadPhoto',
+    context: context,
+  );
+
+  @override
+  Future<bool> uploadPhoto(PickedLocalFile file) {
+    return _$uploadPhotoAsyncAction.run(() => super.uploadPhoto(file));
+  }
+
+  late final _$removePhotoAsyncAction = AsyncAction(
+    'SubmissionStoreBase.removePhoto',
+    context: context,
+  );
+
+  @override
+  Future<bool> removePhoto(String id) {
+    return _$removePhotoAsyncAction.run(() => super.removePhoto(id));
+  }
+
+  late final _$removeDocumentAsyncAction = AsyncAction(
+    'SubmissionStoreBase.removeDocument',
+    context: context,
+  );
+
+  @override
+  Future<bool> removeDocument(String key) {
+    return _$removeDocumentAsyncAction.run(() => super.removeDocument(key));
+  }
+
   late final _$submitAsyncAction = AsyncAction(
     'SubmissionStoreBase.submit',
     context: context,
@@ -178,36 +220,12 @@ mixin _$SubmissionStore on SubmissionStoreBase, Store {
   }
 
   @override
-  void removePhoto(String id) {
-    final _$actionInfo = _$SubmissionStoreBaseActionController.startAction(
-      name: 'SubmissionStoreBase.removePhoto',
-    );
-    try {
-      return super.removePhoto(id);
-    } finally {
-      _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
   void addDocument(String key) {
     final _$actionInfo = _$SubmissionStoreBaseActionController.startAction(
       name: 'SubmissionStoreBase.addDocument',
     );
     try {
       return super.addDocument(key);
-    } finally {
-      _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
-  void removeDocument(String key) {
-    final _$actionInfo = _$SubmissionStoreBaseActionController.startAction(
-      name: 'SubmissionStoreBase.removeDocument',
-    );
-    try {
-      return super.removeDocument(key);
     } finally {
       _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
     }

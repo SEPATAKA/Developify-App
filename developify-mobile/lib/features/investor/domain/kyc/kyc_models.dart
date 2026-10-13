@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
@@ -106,6 +108,7 @@ final class KycUploadAttempt {
     this.error,
     this.append = false,
     this.documentId,
+    this.content,
   });
   final String name;
   final int bytes;
@@ -114,6 +117,7 @@ final class KycUploadAttempt {
   final String? error;
   final bool append;
   final String? documentId;
+  final Uint8List? content;
 }
 
 final class KycDocument {

@@ -59,17 +59,27 @@ abstract class TransferStoreBase with Store, Lifecycle {
   String? error;
   @observable
   InvestorOperationReceipt? receipt;
+  bool get supportsManualEft => _repository.supportsManualEft;
+  bool get cardPaymentsEnabled =>
+      _repository.supportedPaymentMethods.contains(PaymentMethodKind.card);
+  bool get allowDemoBiometricAuthorization =>
+      _repository.allowsDemoBiometricAuthorization;
   @computed
-  List<InvestorPaymentMethod> get methods => [
-    ...?account?.paymentMethods.where(
-      (method) =>
-          method.kind ==
-          (kind == InvestorTransferKind.topUp
-              ? PaymentMethodKind.card
-              : PaymentMethodKind.bankAccount),
-    ),
-    if (kind == InvestorTransferKind.topUp) InvestorDepositAccount.method,
-  ];
+  List<InvestorPaymentMethod> get methods {
+    final selectedKind = kind == InvestorTransferKind.topUp
+        ? paymentKind
+        : PaymentMethodKind.bankAccount;
+    if (kind == InvestorTransferKind.topUp &&
+        selectedKind == PaymentMethodKind.bankAccount &&
+        !_repository.supportsManualEft) {
+      return [InvestorDepositAccount.method];
+    }
+    return account?.paymentMethods
+            .where((method) => method.kind == selectedKind)
+            .toList() ??
+        const [];
+  }
+
   @computed
   InvestorPaymentMethod? get method =>
       methods.where((method) => method.id == methodId).firstOrNull;
@@ -124,7 +134,9 @@ abstract class TransferStoreBase with Store, Lifecycle {
         kind == InvestorTransferKind.withdrawal ||
             methodId == InvestorDepositAccount.method.id
         ? PaymentMethodKind.bankAccount
-        : PaymentMethodKind.card;
+        : _repository.supportedPaymentMethods.contains(PaymentMethodKind.card)
+        ? PaymentMethodKind.card
+        : PaymentMethodKind.bankAccount;
     stage = value == InvestorTransferKind.topUp
         ? TransferStage.method
         : TransferStage.amount;
@@ -237,6 +249,10 @@ abstract class TransferStoreBase with Store, Lifecycle {
         (stage != TransferStage.method && stage != TransferStage.amount)) {
       return;
     }
+    if (_repository.supportsManualEft) {
+      chooseKind(PaymentMethodKind.bankAccount);
+      return;
+    }
     _detailsReturnStage = stage;
     stage = TransferStage.bankDetails;
   }
@@ -327,6 +343,11 @@ abstract class TransferStoreBase with Store, Lifecycle {
     return runInAction(() {
       switch (result) {
         case Success(:final value):
+          if (value.status == InvestorTransactionStatus.failed) {
+            error = 'The payment request was declined. Please try again.';
+            stage = TransferStage.failure;
+            return false;
+          }
           receipt = value;
           stage = TransferStage.success;
           _drafts.clearTransfer(kind);

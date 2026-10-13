@@ -2,6 +2,8 @@ import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
 import 'package:developify_mobile/core/utils/validation.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
+
 import 'package:developify_mobile/features/landowner/domain/landowner_repository.dart';
 import 'package:developify_mobile/features/landowner/domain/submission_draft.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
@@ -75,9 +77,9 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
       draft.copyWith(
         photos: List.generate(
           4,
-          (i) => LocalAttachment(
-            id: 'photo-$i',
-            name: '${['North', 'South', 'East', 'West'][i]} boundary',
+          (index) => LocalAttachment(
+            id: 'photo-$index',
+            name: '${['North', 'South', 'East', 'West'][index]} boundary',
           ),
         ),
       ),
@@ -85,19 +87,13 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   }
 
   @action
-  void removePhoto(String id) => update(
-    draft.copyWith(
-      photos: draft.photos.where((photo) => photo.id != id).toList(),
-    ),
-  );
-  @action
   void addDocument(String key) {
     final documents = Map<String, LocalAttachment>.of(draft.documents);
     documents[key] = LocalAttachment(
       id: key,
       name: switch (key) {
         'title' => 'TD_Erf4412_2019.pdf',
-        'rates' => 'CityJoburg_Rates_May.p',
+        'rates' => 'CityJoburg_Rates_May.pdf',
         'identity' => 'Themba_ID_Certified.pdf',
         'valuation' => 'Valuation_Report.pdf',
         'zoning' => 'TD_Erf4412_2019.pdf',
@@ -108,14 +104,98 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   }
 
   @action
-  void removeDocument(String key) {
-    final documents = Map.of(draft.documents)..remove(key);
-    update(
-      draft.copyWith(
-        documents: documents,
-        coOwners: documents.keys.any((key) => key.startsWith('co-owner')),
-      ),
-    );
+  Future<bool> uploadDocument(String key, PickedLocalFile file) async {
+    if (isDisposed) return false;
+    error = null;
+    final result = await _repository.uploadAttachment(draft.id, key, file);
+    if (isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success(:final value):
+          final documents = Map<String, LocalAttachment>.of(draft.documents)
+            ..[key] = value;
+          draft = draft.copyWith(documents: documents);
+          dirty = true;
+          errors = Map.of(errors)..remove(key);
+          status = LoadStatus.initial;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
+  }
+
+  @action
+  Future<bool> uploadPhoto(PickedLocalFile file) async {
+    final key = 'site-photo-${DateTime.now().microsecondsSinceEpoch}';
+    if (isDisposed) return false;
+    error = null;
+    final result = await _repository.uploadAttachment(draft.id, key, file);
+    if (isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success(:final value):
+          draft = draft.copyWith(photos: [...draft.photos, value]);
+          dirty = true;
+          errors = Map.of(errors)..remove('photos');
+          status = LoadStatus.initial;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
+  }
+
+  @action
+  Future<bool> removePhoto(String id) async {
+    final matches = draft.photos.where((entry) => entry.id == id);
+    final photo = matches.isEmpty ? null : matches.first;
+    if (photo == null || isDisposed) return false;
+    final result = await _repository.removeAttachment(draft.id, photo);
+    if (isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success():
+          draft = draft.copyWith(
+            photos: draft.photos.where((entry) => entry.id != id).toList(),
+          );
+          dirty = true;
+          error = null;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
+  }
+  @action
+  Future<bool> removeDocument(String key) async {
+    final attachment = draft.documents[key];
+    if (attachment == null || isDisposed) return false;
+    final result = await _repository.removeAttachment(draft.id, attachment);
+    if (isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success():
+          final documents = Map.of(draft.documents)..remove(key);
+          draft = draft.copyWith(
+            documents: documents,
+            coOwners: documents.keys.any((key) => key.startsWith('co-owner')),
+          );
+          dirty = true;
+          error = null;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
   }
 
   @action

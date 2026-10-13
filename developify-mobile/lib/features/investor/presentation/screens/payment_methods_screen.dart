@@ -38,6 +38,27 @@ class PaymentMethodsScreen extends StatelessWidget {
 
   Widget _page(BuildContext context) {
     final card = form == PaymentMethodKind.card;
+    final cardRouteRequested =
+        card || (form == null && filter == PaymentMethodKind.card);
+    if (cardRouteRequested && !store.cardPaymentsEnabled) {
+      return InvestorPage(
+        title: 'Card Payments',
+        bottom: AppButton(
+          label: 'Add Bank Account',
+          onPressed: () => _add(context, InvestorRoutes.addBank),
+        ),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28.w),
+            child: Text(
+              'Card payments are not enabled. Add a bank account to use manual EFT.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body,
+            ),
+          ),
+        ),
+      );
+    }
     return InvestorPage(
       onBack: store.saving ? () {} : null,
       headerLeadingInset: form == null && !select ? 19 : null,
@@ -55,7 +76,9 @@ class PaymentMethodsScreen extends StatelessWidget {
           ? filter == PaymentMethodKind.bankAccount
                 ? 'Bank Details'
                 : select
-                ? 'Pay with Card'
+                ? store.cardPaymentsEnabled
+                      ? 'Pay with Card'
+                      : 'Bank Transfer'
                 : 'Payment Methods'
           : card
           ? 'Add New Card'
@@ -247,12 +270,12 @@ class PaymentMethodsScreen extends StatelessWidget {
 
   Widget _methods(BuildContext context) => PaymentMethodsContent(
     store: store,
-    kind: filter ?? PaymentMethodKind.card,
+    kind: filter ?? store.defaultMethodKind,
     select: select,
     manage: manage,
     onAdd: () => _add(
       context,
-      filter == PaymentMethodKind.bankAccount
+      filter == PaymentMethodKind.bankAccount || !store.cardPaymentsEnabled
           ? InvestorRoutes.addBank
           : InvestorRoutes.addCard,
     ),

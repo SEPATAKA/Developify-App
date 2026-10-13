@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { EntityType } from '../../firebase/domain.enums';
 import { KycService } from './kyc.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
@@ -36,6 +36,16 @@ export class KycController {
     },
   ) {
     return this.kyc.upload(user.id, entity, body);
+  }
+
+  @Delete(':entity/documents')
+  deleteDocument(
+    @CurrentUser() user: AuthUser,
+    @Param('entity') entity: EntityType,
+    @Body()
+    body: { key: string; documentId?: string; memberId?: string },
+  ) {
+    return this.kyc.deleteDocument(user.id, entity, body);
   }
 
   @Post(':entity/members')

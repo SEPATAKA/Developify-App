@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/cancellation.dart';
 import 'package:developify_mobile/features/investor/domain/kyc/kyc_models.dart';
@@ -13,14 +15,17 @@ abstract interface class KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
     Cancellation? cancellation,
     bool append = false,
     String? documentId,
+    String? memberId,
   });
-  Result<KycDraft> deleteDocument(
+  Future<Result<KycDraft>> deleteDocument(
     EntityType entity,
     String key, {
     String? documentId,
+    String? memberId,
   });
   Result<KycDraft> saveMember(EntityType entity, KycMember member);
   Result<KycDraft> saveAllocations(
@@ -40,8 +45,9 @@ abstract interface class KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
   });
-  Result<KycDraft> deleteMemberDocument(
+  Future<Result<KycDraft>> deleteMemberDocument(
     EntityType entity,
     String draftKey,
     String documentKey,

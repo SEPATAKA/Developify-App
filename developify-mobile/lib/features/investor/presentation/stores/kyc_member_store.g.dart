@@ -240,10 +240,27 @@ mixin _$KycMemberStore on KycMemberStoreBase, Store {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
   }) {
     return _$uploadAsyncAction.run(
-      () => super.upload(key, name: name, bytes: bytes, mimeType: mimeType),
+      () => super.upload(
+        key,
+        name: name,
+        bytes: bytes,
+        mimeType: mimeType,
+        content: content,
+      ),
     );
+  }
+
+  late final _$deleteDocumentAsyncAction = AsyncAction(
+    'KycMemberStoreBase.deleteDocument',
+    context: context,
+  );
+
+  @override
+  Future<bool> deleteDocument(String key) {
+    return _$deleteDocumentAsyncAction.run(() => super.deleteDocument(key));
   }
 
   late final _$inviteAsyncAction = AsyncAction(
@@ -304,18 +321,6 @@ mixin _$KycMemberStore on KycMemberStoreBase, Store {
     );
     try {
       return super.saveAllocations();
-    } finally {
-      _$KycMemberStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
-  bool deleteDocument(String key) {
-    final _$actionInfo = _$KycMemberStoreBaseActionController.startAction(
-      name: 'KycMemberStoreBase.deleteDocument',
-    );
-    try {
-      return super.deleteDocument(key);
     } finally {
       _$KycMemberStoreBaseActionController.endAction(_$actionInfo);
     }

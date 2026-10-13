@@ -1,6 +1,7 @@
 import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/profile/domain/profile_repository.dart';
 part 'payout_store.g.dart';
 
@@ -19,6 +20,14 @@ abstract class PayoutStoreBase with Store, Lifecycle {
   String branch = '';
   @observable
   bool proofAttached = false;
+  @observable
+  String? proofKey;
+  @observable
+  String? proofName;
+  @observable
+  int proofBytes = 0;
+  @observable
+  bool uploadingProof = false;
   @observable
   Map<String, String> errors = const {};
   @observable
@@ -43,7 +52,8 @@ abstract class PayoutStoreBase with Store, Lifecycle {
     if (!proofAttached) 'proof': 'Attach a bank confirmation letter',
   };
   @computed
-  bool get canSubmit => status != LoadStatus.loading && _validate().isEmpty;
+  bool get canSubmit =>
+      status != LoadStatus.loading && !uploadingProof && _validate().isEmpty;
   void _clear(String key) {
     errors = {...errors}..remove(key);
     error = null;
@@ -81,8 +91,51 @@ abstract class PayoutStoreBase with Store, Lifecycle {
   }
 
   @action
+  Future<bool> uploadProof(PickedLocalFile file) async {
+    if (isDisposed || uploadingProof) return false;
+    uploadingProof = true;
+    error = null;
+    final result = await _repository.uploadFile(
+      file,
+      prefix: 'profile/payout',
+    );
+    if (isDisposed) return false;
+    return runInAction(() {
+      uploadingProof = false;
+      switch (result) {
+        case Success(:final value):
+          proofKey = value;
+          proofName = file.name;
+          proofBytes = file.bytes.length;
+          proofAttached = true;
+          _clear('proof');
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
+  }
+
+  @action
+  Future<bool> removeProof() async {
+    if (isDisposed) return false;
+    return runInAction(() {
+      proofKey = null;
+      proofName = null;
+      proofBytes = 0;
+      proofAttached = false;
+      _clear('proof');
+      return true;
+    });
+  }
+
+  @action
   Future<bool> submit() async {
-    if (isDisposed || status == LoadStatus.loading) return false;
+    if (isDisposed || status == LoadStatus.loading || uploadingProof) {
+      return false;
+    }
     errors = _validate();
     if (errors.isNotEmpty) return false;
     status = LoadStatus.loading;
@@ -95,6 +148,7 @@ abstract class PayoutStoreBase with Store, Lifecycle {
         type: type,
         branchCode: branch,
         holder: 'Themba Nkosi',
+        proofKey: proofKey,
       ),
     );
     if (!isCurrent(request)) return false;

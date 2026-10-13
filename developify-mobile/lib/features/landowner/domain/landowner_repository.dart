@@ -1,4 +1,5 @@
 import 'package:developify_mobile/core/errors/result.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/landowner/domain/property.dart';
 import 'package:developify_mobile/features/landowner/domain/submission_draft.dart';
 
@@ -15,5 +16,14 @@ abstract interface class LandownerRepository {
   Future<Result<EarningsSummary>> earnings();
   SubmissionDraft readDraft(String id);
   void saveDraft(SubmissionDraft draft);
+  Future<Result<LocalAttachment>> uploadAttachment(
+    String draftId,
+    String key,
+    PickedLocalFile file,
+  );
+  Future<Result<void>> removeAttachment(
+    String draftId,
+    LocalAttachment attachment,
+  );
   Future<Result<String>> submit(SubmissionDraft draft);
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
@@ -211,6 +212,7 @@ abstract class KycMemberStoreBase with Store, Lifecycle {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
   }) async {
     if (!editable || busy || draft == null) return false;
     final request = beginRequest();
@@ -224,6 +226,7 @@ abstract class KycMemberStoreBase with Store, Lifecycle {
       name: name,
       bytes: bytes,
       mimeType: mimeType,
+      content: content,
     );
     if (!isCurrent(request)) return false;
     return runInAction(() {
@@ -236,9 +239,17 @@ abstract class KycMemberStoreBase with Store, Lifecycle {
   }
 
   @action
-  bool deleteDocument(String key) {
+  Future<bool> deleteDocument(String key) async {
     if (!editable || busy || draft == null) return false;
-    return _accept(_repository.deleteMemberDocument(entity, _key, key));
+    final request = beginRequest();
+    busy = true;
+    error = null;
+    final result = await _repository.deleteMemberDocument(entity, _key, key);
+    if (!isCurrent(request)) return false;
+    return runInAction(() {
+      busy = false;
+      return _accept(result);
+    });
   }
 
   KycInvite get invitation => KycInvite(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:developify_mobile/core/storage/device_file_picker.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import 'package:developify_mobile/core/widgets/app_chrome.dart';
 import 'package:developify_mobile/core/widgets/app_field.dart';
 import 'package:developify_mobile/core/widgets/sheets.dart';
 import 'package:developify_mobile/core/widgets/states.dart';
+import 'package:developify_mobile/core/widgets/feedback.dart';
 import 'package:developify_mobile/features/profile/presentation/widgets/payout_notice.dart';
 import 'package:developify_mobile/features/profile/presentation/widgets/payout_proof_control.dart';
 import 'package:developify_mobile/features/profile/presentation/widgets/payout_success_sheet.dart';
@@ -27,6 +29,7 @@ class PayoutScreen extends StatefulWidget {
 
 class _PayoutScreenState extends State<PayoutScreen> {
   bool _allowPop = false;
+  final _filePicker = const PlatformDeviceFilePicker();
   @override
   void dispose() {
     widget.store.dispose();
@@ -74,6 +77,40 @@ class _PayoutScreenState extends State<PayoutScreen> {
         widget.store.setType(value);
       }
     }
+  }
+
+  Future<void> _attachProof() async {
+    try {
+      final files = await _filePicker.pick(
+        extensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (!mounted || files == null || files.isEmpty) return;
+      if (!await widget.store.uploadProof(files.first) && mounted) {
+        showFeedback(
+          context,
+          widget.store.error ?? 'The bank document could not be uploaded.',
+        );
+      }
+    } on PlatformException catch (exception) {
+      if (mounted) {
+        showFeedback(
+          context,
+          exception.message ?? 'The selected document could not be read.',
+        );
+      }
+    } on StateError catch (exception) {
+      if (mounted) showFeedback(context, exception.message);
+    }
+  }
+
+  Future<void> _removeProof() async {
+    final removed = await widget.store.removeProof();
+    if (!mounted) return;
+    if (removed) return;
+    showFeedback(
+      context,
+      widget.store.error ?? 'The bank document could not be removed.',
+    );
   }
 
   @override
@@ -156,8 +193,11 @@ class _PayoutScreenState extends State<PayoutScreen> {
               SizedBox(height: 18.w),
               PayoutProofControl(
                 attached: store.proofAttached,
-                onAttach: () => store.attachProof(true),
-                onRemove: () => store.attachProof(false),
+                uploading: store.uploadingProof,
+                fileName: store.proofName,
+                fileBytes: store.proofBytes,
+                onAttach: _attachProof,
+                onRemove: _removeProof,
               ),
               if (store.errors['proof'] != null)
                 InlineError(store.errors['proof']),

@@ -108,6 +108,78 @@ mixin _$PayoutStore on PayoutStoreBase, Store {
     });
   }
 
+  late final _$proofKeyAtom = Atom(
+    name: 'PayoutStoreBase.proofKey',
+    context: context,
+  );
+
+  @override
+  String? get proofKey {
+    _$proofKeyAtom.reportRead();
+    return super.proofKey;
+  }
+
+  @override
+  set proofKey(String? value) {
+    _$proofKeyAtom.reportWrite(value, super.proofKey, () {
+      super.proofKey = value;
+    });
+  }
+
+  late final _$proofNameAtom = Atom(
+    name: 'PayoutStoreBase.proofName',
+    context: context,
+  );
+
+  @override
+  String? get proofName {
+    _$proofNameAtom.reportRead();
+    return super.proofName;
+  }
+
+  @override
+  set proofName(String? value) {
+    _$proofNameAtom.reportWrite(value, super.proofName, () {
+      super.proofName = value;
+    });
+  }
+
+  late final _$proofBytesAtom = Atom(
+    name: 'PayoutStoreBase.proofBytes',
+    context: context,
+  );
+
+  @override
+  int get proofBytes {
+    _$proofBytesAtom.reportRead();
+    return super.proofBytes;
+  }
+
+  @override
+  set proofBytes(int value) {
+    _$proofBytesAtom.reportWrite(value, super.proofBytes, () {
+      super.proofBytes = value;
+    });
+  }
+
+  late final _$uploadingProofAtom = Atom(
+    name: 'PayoutStoreBase.uploadingProof',
+    context: context,
+  );
+
+  @override
+  bool get uploadingProof {
+    _$uploadingProofAtom.reportRead();
+    return super.uploadingProof;
+  }
+
+  @override
+  set uploadingProof(bool value) {
+    _$uploadingProofAtom.reportWrite(value, super.uploadingProof, () {
+      super.uploadingProof = value;
+    });
+  }
+
   late final _$errorsAtom = Atom(
     name: 'PayoutStoreBase.errors',
     context: context,
@@ -160,6 +232,26 @@ mixin _$PayoutStore on PayoutStoreBase, Store {
     _$errorAtom.reportWrite(value, super.error, () {
       super.error = value;
     });
+  }
+
+  late final _$uploadProofAsyncAction = AsyncAction(
+    'PayoutStoreBase.uploadProof',
+    context: context,
+  );
+
+  @override
+  Future<bool> uploadProof(PickedLocalFile file) {
+    return _$uploadProofAsyncAction.run(() => super.uploadProof(file));
+  }
+
+  late final _$removeProofAsyncAction = AsyncAction(
+    'PayoutStoreBase.removeProof',
+    context: context,
+  );
+
+  @override
+  Future<bool> removeProof() {
+    return _$removeProofAsyncAction.run(() => super.removeProof());
   }
 
   late final _$submitAsyncAction = AsyncAction(
@@ -245,6 +337,10 @@ number: ${number},
 type: ${type},
 branch: ${branch},
 proofAttached: ${proofAttached},
+proofKey: ${proofKey},
+proofName: ${proofName},
+proofBytes: ${proofBytes},
+uploadingProof: ${uploadingProof},
 errors: ${errors},
 status: ${status},
 error: ${error},

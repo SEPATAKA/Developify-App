@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:developify_mobile/features/investor/data/kyc_demo_fixtures.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/core/errors/result.dart';
@@ -269,9 +270,11 @@ final class MockKycRepository implements KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
     Cancellation? cancellation,
     bool append = false,
     String? documentId,
+    String? memberId,
   }) => _run(entity, () {
     final definition = _documentDefinition(entity, key);
     if (definition == null) {
@@ -345,11 +348,12 @@ final class MockKycRepository implements KycRepository {
     );
   }, callerCancellation: cancellation);
   @override
-  Result<KycDraft> deleteDocument(
+  Future<Result<KycDraft>> deleteDocument(
     EntityType entity,
     String key, {
     String? documentId,
-  }) {
+    String? memberId,
+  }) => _run(entity, () {
     if (_accessError case final error?) return Failure(error);
     final draft = _draft(entity);
     final existing = draft.documentsFor(key);
@@ -391,7 +395,7 @@ final class MockKycRepository implements KycRepository {
         status: VerificationStatus.incomplete,
       ),
     );
-  }
+  });
 
   @override
   Result<KycDraft> saveAllocations(
@@ -515,6 +519,7 @@ final class MockKycRepository implements KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
   }) => _run(entity, () {
     final member = _draft(entity).memberDrafts[draftKey];
     if (member == null ||
@@ -556,11 +561,11 @@ final class MockKycRepository implements KycRepository {
   });
 
   @override
-  Result<KycDraft> deleteMemberDocument(
+  Future<Result<KycDraft>> deleteMemberDocument(
     EntityType entity,
     String draftKey,
     String documentKey,
-  ) {
+  ) => _run(entity, () {
     if (_accessError case final error?) return Failure(error);
     final member = _draft(entity).memberDrafts[draftKey];
     if (member == null || !member.documents.containsKey(documentKey)) {
@@ -573,7 +578,7 @@ final class MockKycRepository implements KycRepository {
       draftKey,
       member.copyWith(documents: {...member.documents}..remove(documentKey)),
     );
-  }
+  });
 
   @override
   Result<KycDraft> saveMember(EntityType entity, KycMember member) {

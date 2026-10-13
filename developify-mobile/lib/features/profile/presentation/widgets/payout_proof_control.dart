@@ -12,10 +12,16 @@ class PayoutProofControl extends StatelessWidget {
     required this.attached,
     required this.onAttach,
     required this.onRemove,
+    this.uploading = false,
+    this.fileName,
+    this.fileBytes = 0,
   });
   final bool attached;
   final VoidCallback onAttach;
   final VoidCallback onRemove;
+  final bool uploading;
+  final String? fileName;
+  final int fileBytes;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -37,7 +43,11 @@ class PayoutProofControl extends StatelessWidget {
           alignment: Alignment.topLeft,
           minWidth: constraints.maxWidth + 2.w,
           maxWidth: constraints.maxWidth + 2.w,
-          child: attached ? _file() : _upload(),
+          child: attached
+              ? _file()
+              : uploading
+              ? _uploading()
+              : _upload(),
         ),
       ),
     ],
@@ -62,7 +72,7 @@ class PayoutProofControl extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Bank account letter',
+                fileName ?? 'Bank account letter',
                 style: AppTextStyles.text(
                   14,
                   weight: FontWeight.w500,
@@ -73,7 +83,11 @@ class PayoutProofControl extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '120 Kb',
+                    fileBytes <= 0
+                        ? 'Uploaded'
+                        : fileBytes < 1024 * 1024
+                        ? '${(fileBytes / 1024).ceil()} KB'
+                        : '${(fileBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
                     style: AppTextStyles.text(
                       14,
                       color: AppColors.mutedSlate,
@@ -125,6 +139,12 @@ class PayoutProofControl extends StatelessWidget {
         ),
       ],
     ),
+  );
+
+  Widget _uploading() => Container(
+    constraints: BoxConstraints(minHeight: 168.w),
+    alignment: Alignment.center,
+    child: const CircularProgressIndicator(),
   );
 
   Widget _upload() => Semantics(

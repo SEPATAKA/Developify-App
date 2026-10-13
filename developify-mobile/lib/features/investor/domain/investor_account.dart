@@ -103,6 +103,24 @@ abstract final class InvestorDepositAccount {
   static const reference = '1234567';
 }
 
+final class InvestorPaymentInstructions {
+  const InvestorPaymentInstructions({
+    required this.bank,
+    required this.accountNumber,
+    required this.branchCode,
+    required this.reference,
+    required this.amountCents,
+    required this.note,
+  });
+
+  final String bank;
+  final String accountNumber;
+  final String branchCode;
+  final String reference;
+  final int amountCents;
+  final String note;
+}
+
 final class InvestorTransaction {
   const InvestorTransaction({
     required this.id,
@@ -353,7 +371,11 @@ final class InvestorOperationReceipt {
   const InvestorOperationReceipt({
     required this.transactionId,
     this.investmentId,
+    this.status = InvestorTransactionStatus.successful,
+    this.paymentInstructions,
   });
   final String transactionId;
   final String? investmentId;
+  final InvestorTransactionStatus status;
+  final InvestorPaymentInstructions? paymentInstructions;
 }

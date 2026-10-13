@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { EntityType, VerificationStatus } from '../../firebase/domain.enums';
@@ -183,11 +184,29 @@ export class KycService {
       !data.key.trim() ||
       !data.name.trim() ||
       !data.mimeType.trim() ||
-      !data.storageKey.trim() ||
+      !data.storageKey.startsWith(`kyc/${entityType}/${userId}/`) ||
       !Number.isSafeInteger(data.sizeBytes) ||
-      data.sizeBytes <= 0
+      data.sizeBytes <= 0 ||
+      data.sizeBytes > 5 * 1024 * 1024
     ) {
       throw new BadRequestException('Document metadata is invalid.');
+    }
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new ServiceUnavailableException(
+        'FIREBASE_STORAGE_BUCKET must be configured for KYC uploads.',
+      );
+    }
+    const uploadedFile = this.firebase.storage
+      .bucket(bucketName)
+      .file(data.storageKey);
+    const [fileMetadata] = await uploadedFile.getMetadata();
+    if (
+      fileMetadata.metadata?.ownerId !== userId ||
+      Number(fileMetadata.size) !== data.sizeBytes ||
+      fileMetadata.contentType !== data.mimeType
+    ) {
+      throw new BadRequestException('The uploaded KYC file could not be verified.');
     }
     if (data.memberId) {
       const member = await this.firestore
@@ -208,6 +227,65 @@ export class KycService {
       storageKey: data.storageKey,
       createdAt: new Date(),
     });
+    return this.load(userId, entityType);
+  }
+
+  async deleteDocument(
+    userId: string,
+    entityType: EntityType,
+    data: { key: string; documentId?: string; memberId?: string },
+  ) {
+    const entity = await this.users.resolveEntity(userId, entityType);
+    const draft = await this.ensureDraft(entity.id);
+    if (!data.key?.trim()) {
+      throw new BadRequestException('A document key is required.');
+    }
+    if (data.memberId) {
+      const member = await this.firestore
+        .collection('kycMembers')
+        .doc(data.memberId)
+        .get();
+      if (!member.exists || member.get('draftId') !== draft.id) {
+        throw new NotFoundException('KYC member not found.');
+      }
+    }
+    const snapshot = await this.firestore
+      .collection('documents')
+      .where('draftId', '==', draft.id)
+      .get();
+    const matches = snapshot.docs.filter(
+      (document) =>
+        document.get('key') === data.key &&
+        (document.get('memberId') ?? null) === (data.memberId ?? null) &&
+        (data.documentId == null || document.id === data.documentId),
+    );
+    if (matches.length === 0) {
+      throw new NotFoundException('KYC document not found.');
+    }
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new ServiceUnavailableException(
+        'FIREBASE_STORAGE_BUCKET must be configured to remove KYC files.',
+      );
+    }
+    for (const document of matches) {
+      const storageKey = document.get('storageKey');
+      if (
+        typeof storageKey !== 'string' ||
+        !storageKey.startsWith(`kyc/${entityType}/${userId}/`)
+      ) {
+        throw new BadRequestException('The KYC file reference is invalid.');
+      }
+      const file = this.firebase.storage.bucket(bucketName).file(storageKey);
+      const [metadata] = await file.getMetadata();
+      if (metadata.metadata?.ownerId !== userId) {
+        throw new BadRequestException('The KYC file could not be verified.');
+      }
+      await file.delete({ ignoreNotFound: true });
+    }
+    const batch = this.firestore.batch();
+    for (const document of matches) batch.delete(document.ref);
+    await batch.commit();
     return this.load(userId, entityType);
   }
 

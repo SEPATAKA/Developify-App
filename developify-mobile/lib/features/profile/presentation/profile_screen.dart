@@ -23,6 +23,7 @@ import 'package:developify_mobile/features/profile/presentation/widgets/profile_
 import 'package:developify_mobile/features/profile/presentation/widgets/landowner_profile_header.dart';
 import 'package:developify_mobile/core/widgets/sheets.dart';
 import 'package:developify_mobile/core/widgets/states.dart';
+import 'package:developify_mobile/core/storage/device_file_picker.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
 import 'package:developify_mobile/core/utils/money.dart';
 import 'package:developify_mobile/features/landowner/domain/landowner_repository.dart';
@@ -59,6 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ProfileStore get store => widget.store;
   bool get _investor => widget.routePrefix == 'investor-';
   bool _allowPop = false;
+  final _filePicker = const PlatformDeviceFilePicker();
   String? _phoneCountryCode;
   int _propertyCount = 0;
   int _approvedCount = 0;
@@ -127,6 +129,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } else {
         context.goNamed('${widget.routePrefix}${Routes.profile}');
       }
+    }
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final files = await _filePicker.pick(
+        extensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (!mounted || files == null || files.isEmpty) return;
+      if (!await store.selectPhoto(files.first) && mounted) {
+        showFeedback(
+          context,
+          store.error ?? 'The profile photo could not be uploaded.',
+        );
+      }
+    } on PlatformException catch (exception) {
+      if (mounted) {
+        showFeedback(
+          context,
+          exception.message ?? 'The selected photo could not be read.',
+        );
+      }
+    } on StateError catch (exception) {
+      if (mounted) showFeedback(context, exception.message);
     }
   }
 
@@ -409,7 +435,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? AppAssets.investorProfileAvatar
                 : AppAssets.avatar,
             hasPhoto: user.hasProfilePhoto,
-            onChanged: store.selectPhoto,
+            photoUrl: user.profilePhotoUrl,
+            photoBytes: user.profilePhotoPreview,
+            onChanged: _pickProfilePhoto,
           ),
         ),
         SizedBox(height: (user.hasProfilePhoto ? 13.5 : 18.5).w),

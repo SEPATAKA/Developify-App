@@ -215,7 +215,7 @@ void main() {
       );
       current = await draft(entity);
       expect(current.verifiedSteps, {'register'});
-      repository.deleteDocument(entity, 'memberRegister');
+      await repository.deleteDocument(entity, 'memberRegister');
       current = await draft(entity);
       expect(current.verifiedSteps, isEmpty);
       expect(current.completedSteps, isNot(contains('register')));
@@ -331,7 +331,7 @@ void main() {
       );
       current = await draft(entity);
       expect(current.identitySummary!.name, user.name);
-      repository.deleteDocument(entity, 'identityFront');
+      await repository.deleteDocument(entity, 'identityFront');
       expect((await draft(entity)).identitySummary, isNull);
       behavior.failNext();
       expect(
@@ -626,7 +626,7 @@ void main() {
         isNot(firstId),
       );
       expect(
-        repository.deleteDocument(entity, 'identityFront'),
+        await repository.deleteDocument(entity, 'identityFront'),
         isA<Success<KycDraft>>(),
       );
       expect(

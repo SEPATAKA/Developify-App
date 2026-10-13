@@ -6,6 +6,7 @@ import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/core/widgets/app_button.dart';
 import 'package:developify_mobile/core/widgets/app_field.dart';
+
 import 'package:developify_mobile/features/profile/data/mock_profile_repository.dart';
 import 'package:developify_mobile/features/profile/domain/profile_repository.dart';
 import 'package:developify_mobile/features/profile/presentation/widgets/payout_success_sheet.dart';
@@ -176,8 +177,11 @@ void main() {
       );
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('payout-proof-upload')));
-      await tester.pumpAndSettle();
+      final payoutStore = tester
+          .widget<PayoutScreen>(find.byType(PayoutScreen))
+          .store;
+      payoutStore.attachProof(true);
+      await tester.pump();
       expect(find.text('Bank account letter'), findsOneWidget);
       await captureFidelity(tester, key, '4105-12005');
       await tester.tap(find.bySemanticsLabel('Remove bank account letter'));
@@ -186,8 +190,8 @@ void main() {
         tester.widget<PayoutScreen>(find.byType(PayoutScreen)).store.canSubmit,
         isFalse,
       );
-      await tester.tap(find.byKey(const ValueKey('payout-proof-upload')));
-      await tester.pumpAndSettle();
+      payoutStore.attachProof(true);
+      await tester.pump();
       final repo = deps.container<ProfileRepository>() as MockProfileRepository;
       repo.behavior.failNext();
       await tester.tap(find.text('Submit for verification'));

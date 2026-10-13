@@ -56,6 +56,9 @@ export class UsersController {
       pin?: string;
       password?: string;
       currentPassword?: string;
+      biometrics?: Record<string, boolean>;
+      twoFactorEnabled?: boolean;
+      previousDevices?: string[];
     },
   ) {
     return this.users.updateSecurity(
@@ -64,6 +67,11 @@ export class UsersController {
       body.pin,
       body.password,
       body.currentPassword,
+      {
+        biometrics: body.biometrics,
+        twoFactorEnabled: body.twoFactorEnabled,
+        previousDevices: body.previousDevices,
+      },
     );
   }
 }

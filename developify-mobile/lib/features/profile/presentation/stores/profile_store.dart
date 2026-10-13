@@ -2,6 +2,7 @@ import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
 import 'package:developify_mobile/core/utils/validation.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/profile/domain/profile_repository.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 part 'profile_store.g.dart';
@@ -23,8 +24,6 @@ abstract class ProfileStoreBase with Store, Lifecycle {
   bool saving = false;
   @observable
   bool dirty = false;
-  @observable
-  bool samplePhotoSelected = false;
   @observable
   ProfilePreferences preferences = const ProfilePreferences();
   @observable
@@ -68,11 +67,28 @@ abstract class ProfileStoreBase with Store, Lifecycle {
   }
 
   @action
-  void selectPhoto() {
-    if (isDisposed || saving) return;
-    samplePhotoSelected = true;
-    user = user?.copyWith(hasProfilePhoto: true);
-    dirty = true;
+  Future<bool> selectPhoto(PickedLocalFile file) async {
+    if (isDisposed || saving) return false;
+    saving = true;
+    error = null;
+    final result = await _repository.uploadFile(file, prefix: 'profile/avatar');
+    if (isDisposed) return false;
+    return runInAction(() {
+      saving = false;
+      switch (result) {
+        case Success(:final value):
+          user = user?.copyWith(
+            hasProfilePhoto: true,
+            profilePhotoKey: value,
+            profilePhotoPreview: file.bytes,
+          );
+          dirty = true;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          return false;
+      }
+    });
   }
 
   @action

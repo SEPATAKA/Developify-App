@@ -257,6 +257,7 @@ mixin _$KycStore on KycStoreBase, Store {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
     bool append = false,
     String? documentId,
   }) {
@@ -266,9 +267,22 @@ mixin _$KycStore on KycStoreBase, Store {
         name: name,
         bytes: bytes,
         mimeType: mimeType,
+        content: content,
         append: append,
         documentId: documentId,
       ),
+    );
+  }
+
+  late final _$deleteDocumentAsyncAction = AsyncAction(
+    'KycStoreBase.deleteDocument',
+    context: context,
+  );
+
+  @override
+  Future<bool> deleteDocument(String key, {String? documentId}) {
+    return _$deleteDocumentAsyncAction.run(
+      () => super.deleteDocument(key, documentId: documentId),
     );
   }
 
@@ -380,18 +394,6 @@ mixin _$KycStore on KycStoreBase, Store {
     );
     try {
       return super.retryUpload(key);
-    } finally {
-      _$KycStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
-  bool deleteDocument(String key, {String? documentId}) {
-    final _$actionInfo = _$KycStoreBaseActionController.startAction(
-      name: 'KycStoreBase.deleteDocument',
-    );
-    try {
-      return super.deleteDocument(key, documentId: documentId);
     } finally {
       _$KycStoreBaseActionController.endAction(_$actionInfo);
     }

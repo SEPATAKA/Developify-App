@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/network/api_client.dart';
+import 'package:developify_mobile/core/storage/api_document_uploader.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/core/utils/cancellation.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/kyc/kyc_models.dart';
@@ -11,8 +14,10 @@ import 'package:developify_mobile/features/shared/domain/app_user.dart';
 /// Live KYC adapter. Sync `save*` methods update a local cache and enqueue
 /// persistence so store APIs stay unchanged.
 final class ApiKycRepository implements KycRepository {
-  ApiKycRepository(this._client);
+  ApiKycRepository(this._client, {DocumentUploader? uploader})
+    : _uploader = uploader ?? ApiDocumentUploader(_client);
   final ApiClient _client;
+  final DocumentUploader _uploader;
   final _changes = StreamController<KycChange>.broadcast();
   final Map<EntityType, KycDraft> _drafts = {};
 
@@ -91,23 +96,26 @@ final class ApiKycRepository implements KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
     Cancellation? cancellation,
     bool append = false,
     String? documentId,
+    String? memberId,
   }) async {
-    final presign = await _client.request<Object?>(
-      path: '/v1/documents/presign',
-      method: 'POST',
-      data: {
-        'name': name,
-        'mimeType': mimeType,
-        'prefix': 'kyc/${entity.name}',
-      },
-      decode: (json) => json,
+    if (content == null || content.length != bytes) {
+      return const Failure(
+        AppFailure(
+          FailureKind.validation,
+          'Select the file from your device before uploading.',
+        ),
+      );
+    }
+    final uploaded = await _uploader.upload(
+      PickedLocalFile(name: name, mimeType: mimeType, bytes: content),
+      prefix: 'kyc/${entity.name}',
     );
-    if (presign is Failure) return Failure((presign).error);
-    final storageKey =
-        ((presign as Success).value as Map)['storageKey'] as String? ?? name;
+    if (uploaded case Failure(:final error)) return Failure(error);
+    final storageKey = (uploaded as Success<String>).value;
     final result = await _client.request(
       path: '/v1/kyc/${entity.name}/documents',
       method: 'POST',
@@ -117,9 +125,22 @@ final class ApiKycRepository implements KycRepository {
         'mimeType': mimeType,
         'sizeBytes': bytes,
         'storageKey': storageKey,
+        'memberId': ?memberId,
       },
       decode: (json) => _mapDraft(json, entity),
     );
+    if (result case Failure(:final error)) {
+      final cleanup = await _uploader.delete(storageKey);
+      if (cleanup case Failure(error: final cleanupError)) {
+        return Failure(
+          AppFailure(
+            FailureKind.server,
+            'The file could not be linked to KYC (${error.message}) and cleanup failed: ${cleanupError.message}',
+          ),
+        );
+      }
+      return Failure(error);
+    }
     if (result case Success(:final value)) {
       _drafts[entity] = value;
       _changes.add(KycChange(entity));
@@ -128,15 +149,27 @@ final class ApiKycRepository implements KycRepository {
   }
 
   @override
-  Result<KycDraft> deleteDocument(
+  Future<Result<KycDraft>> deleteDocument(
     EntityType entity,
     String key, {
     String? documentId,
-  }) {
-    final current = _drafts[entity] ?? KycDraft(entity: entity);
-    final docs = Map<String, KycDocument>.from(current.documents)..remove(key);
-    final next = current.copyWith(documents: docs);
-    return save(next);
+    String? memberId,
+  }) async {
+    final result = await _client.request(
+      path: '/v1/kyc/${entity.name}/documents',
+      method: 'DELETE',
+      data: {
+        'key': key,
+        'documentId': ?documentId,
+        'memberId': ?memberId,
+      },
+      decode: (json) => _mapDraft(json, entity),
+    );
+    if (result case Success(:final value)) {
+      _drafts[entity] = value;
+      _changes.add(KycChange(entity));
+    }
+    return result;
   }
 
   @override
@@ -183,6 +216,7 @@ final class ApiKycRepository implements KycRepository {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
   }) {
     return upload(
       entity,
@@ -190,16 +224,18 @@ final class ApiKycRepository implements KycRepository {
       name: name,
       bytes: bytes,
       mimeType: mimeType,
+      content: content,
+      memberId: draftKey,
     );
   }
 
   @override
-  Result<KycDraft> deleteMemberDocument(
+  Future<Result<KycDraft>> deleteMemberDocument(
     EntityType entity,
     String draftKey,
     String documentKey,
   ) {
-    return deleteDocument(entity, documentKey);
+    return deleteDocument(entity, documentKey, memberId: draftKey);
   }
 
   @override

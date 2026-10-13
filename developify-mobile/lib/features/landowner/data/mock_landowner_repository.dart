@@ -3,6 +3,7 @@ import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/services/mock_request_scope.dart';
 import 'package:developify_mobile/core/services/mock_behavior.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/landowner/domain/landowner_repository.dart';
 import 'package:developify_mobile/features/landowner/domain/property.dart';
 import 'package:developify_mobile/features/landowner/domain/submission_draft.dart';
@@ -229,6 +230,30 @@ final class MockLandownerRepository implements LandownerRepository {
     _drafts[draft.id] = draft;
     _changes.add(null);
   }
+
+  @override
+  Future<Result<LocalAttachment>> uploadAttachment(
+    String draftId,
+    String key,
+    PickedLocalFile file,
+  ) => _run(
+    () => LocalAttachment(
+      id: '$draftId-$key-${DateTime.now().microsecondsSinceEpoch}',
+      name: file.name,
+      bytes: file.bytes.length,
+      mimeType: file.mimeType,
+      documentKey: key,
+      previewBytes: file.bytes,
+    ),
+  );
+
+  @override
+  Future<Result<void>> removeAttachment(
+    String draftId,
+    LocalAttachment attachment,
+  ) => _run(() {
+    _changes.add(null);
+  });
 
   @override
   Future<Result<String>> submit(SubmissionDraft draft) => _run(() {

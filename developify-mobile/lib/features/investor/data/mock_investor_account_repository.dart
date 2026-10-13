@@ -57,6 +57,18 @@ final class MockInvestorAccountRepository implements InvestorAccountRepository {
   Stream<InvestorAccountChange> get changes => _changes.stream;
 
   @override
+  Set<PaymentMethodKind> get supportedPaymentMethods => const {
+    PaymentMethodKind.card,
+    PaymentMethodKind.bankAccount,
+  };
+
+  @override
+  bool get supportsManualEft => false;
+
+  @override
+  bool get allowsDemoBiometricAuthorization => true;
+
+  @override
   String newOperationId() => '${_context.entity.name}-operation-${++_sequence}';
 
   void _emit(Set<InvestorDataKind> kinds) {

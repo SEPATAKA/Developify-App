@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ import 'package:developify_mobile/core/widgets/app_icon.dart';
 import 'package:developify_mobile/core/widgets/dashed_border.dart';
 import 'package:developify_mobile/core/widgets/sheets.dart';
 import 'package:developify_mobile/core/widgets/states.dart';
+import 'package:developify_mobile/core/storage/device_file_picker.dart';
 import 'package:developify_mobile/features/landowner/presentation/stores/submission_store.dart';
 import 'package:developify_mobile/features/landowner/presentation/widgets/upload_tile.dart';
 import 'package:developify_mobile/features/landowner/presentation/widgets/submission_selection.dart';
@@ -39,6 +41,8 @@ class SubmissionScreen extends StatefulWidget {
 class _SubmissionScreenState extends State<SubmissionScreen> {
   SubmissionStore get store => widget.store;
   final _scrollController = ScrollController();
+  final _filePicker = const PlatformDeviceFilePicker();
+  final Set<String> _uploading = {};
   @override
   void initState() {
     super.initState();
@@ -116,8 +120,59 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
     }
   }
 
-  void _attach(String key) {
-    store.addDocument(key);
+  Future<void> _attach(String key) async {
+    if (_uploading.contains(key)) return;
+    try {
+      final files = await _filePicker.pick(
+        extensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (!mounted || files == null || files.isEmpty) return;
+      setState(() => _uploading.add(key));
+      final success = await store.uploadDocument(key, files.first);
+      if (mounted && !success) _showUploadError();
+    } on PlatformException catch (exception) {
+      if (mounted) _showUploadError(exception.message ?? 'Could not select the file.');
+    } on StateError catch (exception) {
+      if (mounted) _showUploadError(exception.message);
+    } finally {
+      if (mounted) setState(() => _uploading.remove(key));
+    }
+  }
+
+  Future<void> _attachPhotos() async {
+    final remaining = 6 - store.draft.photos.length;
+    if (remaining <= 0 || _uploading.contains('photos')) return;
+    try {
+      final files = await _filePicker.pick(
+        extensions: const ['jpg', 'jpeg', 'png', 'webp'],
+        allowMultiple: true,
+      );
+      if (!mounted || files == null || files.isEmpty) return;
+      setState(() => _uploading.add('photos'));
+      for (final file in files.take(remaining)) {
+        if (!mounted) return;
+        if (!await store.uploadPhoto(file)) {
+          _showUploadError();
+          break;
+        }
+      }
+      if (mounted && files.length > remaining) {
+        _showUploadError('You can add up to 6 site photos.');
+      }
+    } on PlatformException catch (exception) {
+      if (mounted) _showUploadError(exception.message ?? 'Could not select photos.');
+    } on StateError catch (exception) {
+      if (mounted) _showUploadError(exception.message);
+    } finally {
+      if (mounted) setState(() => _uploading.remove('photos'));
+    }
+  }
+
+  void _showUploadError([String? message]) {
+    final text = message ?? store.error ?? 'The file upload failed.';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _select(
@@ -403,9 +458,16 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
     layout: layout,
     attachedTitle: attachedTitle,
     fileName: store.draft.documents[key]?.name,
+    byteSize: store.draft.documents[key]?.bytes,
     error: store.errors[key],
+    loading: _uploading.contains(key),
     onTap: () => _attach(key),
-    onRemove: () => store.removeDocument(key),
+    onRemove: store.draft.documents.containsKey(key)
+        ? () async {
+            final removed = await store.removeDocument(key);
+            if (mounted && !removed) _showUploadError();
+          }
+        : null,
   );
   Widget _body() {
     final d = store.draft;
@@ -614,17 +676,15 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
                   return DashedPhotoTile(
                     key: ValueKey('site-photo-$index'),
                     label: photo?.name,
-                    asset: photo == null
-                        ? null
-                        : switch (photo.id) {
-                            'photo-0' => AppAssets.sitePhotoPool,
-                            'photo-1' => AppAssets.sitePhotoResidence,
-                            _ => AppAssets.sitePhotoVilla,
-                          },
+                    imageBytes: photo?.previewBytes,
+                    loading: _uploading.contains('photos') && photo == null,
                     onRemove: photo == null
                         ? null
-                        : () => store.removePhoto(photo.id),
-                    onTap: store.addSamplePhotos,
+                        : () async {
+                            final removed = await store.removePhoto(photo.id);
+                            if (mounted && !removed) _showUploadError();
+                          },
+                    onTap: photo == null ? _attachPhotos : () {},
                   );
                 },
               ),
@@ -814,7 +874,7 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
                       index++;
                       key = 'co-owner-$index';
                     }
-                    store.addDocument(key);
+                    _attach(key);
                   },
                   borderRadius: BorderRadius.circular(12.w),
                   child: CustomPaint(
@@ -975,9 +1035,9 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
                             value: d.hasValuation,
                             onChanged: (value) {
                               store.update(d.copyWith(hasValuation: value));
-                              if (value) {
-                                store.addDocument('valuation');
-                              } else {
+                              store.update(d.copyWith(hasValuation: value));
+                              if (!value &&
+                                  d.documents.containsKey('valuation')) {
                                 store.removeDocument('valuation');
                               }
                             },
@@ -986,6 +1046,10 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
                       ),
                     ],
                   ),
+                  if (d.hasValuation) ...[
+                    _gap(13),
+                    _document('valuation', 'Upload valuation report'),
+                  ],
                 ],
               ),
             ),

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import type { Query } from 'firebase-admin/firestore';
@@ -26,6 +27,26 @@ export class UsersService {
   async getProfile(userId: string) {
     const profile = await this.firebase.findUserSessionProfileById(userId);
     if (!profile) throw new NotFoundException('User profile not found.');
+    const userDocument = await this.firestore
+      .collection('users')
+      .doc(userId)
+      .get();
+    const photoKey = userDocument.get('profilePhotoKey');
+    let profilePhotoUrl: string | null = null;
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (
+      typeof photoKey === 'string' &&
+      photoKey.startsWith(`profile/avatar/${userId}/`) &&
+      bucketName
+    ) {
+      [profilePhotoUrl] = await this.firebase.storage
+        .bucket(bucketName)
+        .file(photoKey)
+        .getSignedUrl({
+          action: 'read',
+          expires: Date.now() + 15 * 60 * 1000,
+        });
+    }
     return {
       id: profile.id,
       name: String(profile.name ?? ''),
@@ -33,7 +54,9 @@ export class UsersService {
       phone: String(profile.phone ?? ''),
       address: String(profile.address ?? ''),
       entity: String(profile.entities[0]?.entityType ?? 'individual'),
-      hasProfilePhoto: profile.hasProfilePhoto === true,
+      hasProfilePhoto: profile.hasProfilePhoto === true || !!profilePhotoUrl,
+      profilePhotoKey: typeof photoKey === 'string' ? photoKey : null,
+      profilePhotoUrl,
       countryCode: String(profile.countryCode ?? 'ZA'),
       nonResident: profile.nonResident === true,
       investorNumber:
@@ -57,6 +80,7 @@ export class UsersService {
       address: string;
       countryCode: string;
       hasProfilePhoto: boolean;
+      profilePhotoKey: string | null;
       nonResident: boolean;
     }>,
   ) {
@@ -69,19 +93,30 @@ export class UsersService {
         'Update your email through Firebase Authentication.',
       );
     }
-    const updates: Record<string, string | boolean> = {};
+    const updates: Record<string, string | boolean | null> = {};
+    if (typeof data.profilePhotoKey === 'string') {
+      await this.assertUploadedFile(
+        userId,
+        data.profilePhotoKey,
+        `profile/avatar/${userId}/`,
+      );
+      updates.profilePhotoKey = data.profilePhotoKey;
+      updates.hasProfilePhoto = true;
+    } else if (data.profilePhotoKey === null) {
+      updates.profilePhotoKey = null;
+      updates.hasProfilePhoto = false;
+    }
     for (const key of [
       'name',
       'phone',
       'address',
       'countryCode',
-      'hasProfilePhoto',
       'nonResident',
     ] as const) {
       const value = data[key];
       if (value === undefined) continue;
       if (
-        key === 'hasProfilePhoto' || key === 'nonResident'
+        key === 'nonResident'
           ? typeof value !== 'boolean'
           : typeof value !== 'string'
       ) {
@@ -155,9 +190,16 @@ export class UsersService {
       type: string;
       branchCode: string;
       holder: string;
-      proofKey?: string;
+      proofKey?: string | null;
     },
   ) {
+    if (typeof data.proofKey === 'string') {
+      await this.assertUploadedFile(
+        userId,
+        data.proofKey,
+        `profile/payout/${userId}/`,
+      );
+    }
     const ref = this.firestore.collection('payoutAccounts').doc(userId);
     const existing = await ref.get();
     await ref.set(
@@ -172,6 +214,27 @@ export class UsersService {
     const saved = await ref.get();
     const { userId: _, ...fields } = saved.data()!;
     return { id: saved.id, ...fields };
+  }
+
+  private async assertUploadedFile(
+    userId: string,
+    storageKey: string,
+    requiredPrefix: string,
+  ) {
+    if (!storageKey.startsWith(requiredPrefix)) {
+      throw new BadRequestException('The uploaded file reference is invalid.');
+    }
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new ServiceUnavailableException(
+        'FIREBASE_STORAGE_BUCKET must be configured for file verification.',
+      );
+    }
+    const file = this.firebase.storage.bucket(bucketName).file(storageKey);
+    const [metadata] = await file.getMetadata();
+    if (metadata.metadata?.ownerId !== userId) {
+      throw new BadRequestException('The uploaded file could not be verified.');
+    }
   }
 
   async getSecurity(userId: string) {
@@ -200,7 +263,40 @@ export class UsersService {
     pin?: string,
     password?: string,
     currentPassword?: string,
+    preferences?: {
+      biometrics?: Record<string, boolean>;
+      twoFactorEnabled?: boolean;
+      previousDevices?: string[];
+    },
   ) {
+    if (action === 'savePreferences') {
+      const { biometrics, twoFactorEnabled, previousDevices } =
+        preferences ?? {};
+      if (
+        !biometrics ||
+        Object.values(biometrics).some((enabled) => typeof enabled !== 'boolean') ||
+        typeof twoFactorEnabled !== 'boolean' ||
+        !Array.isArray(previousDevices) ||
+        previousDevices.some((device) => typeof device !== 'string')
+      ) {
+        throw new BadRequestException('Security preferences are invalid.');
+      }
+      const saved = {
+        biometrics,
+        twoFactorEnabled,
+        previousDevices,
+        updatedAt: new Date(),
+      };
+      await this.firestore
+        .collection('securityPreferences')
+        .doc(userId)
+        .set({ userId, ...saved }, { merge: true });
+      return {
+        biometrics: saved.biometrics,
+        twoFactorEnabled: saved.twoFactorEnabled,
+        previousDevices: saved.previousDevices,
+      };
+    }
     if (action === 'setPin') {
       if (!pin || !/^\d{4,12}$/.test(pin)) {
         throw new BadRequestException('PIN must contain 4 to 12 digits.');

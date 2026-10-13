@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
@@ -337,6 +338,7 @@ abstract class KycStoreBase with Store, Lifecycle {
     required String name,
     required int bytes,
     required String mimeType,
+    Uint8List? content,
     bool append = false,
     String? documentId,
   }) async {
@@ -354,6 +356,7 @@ abstract class KycStoreBase with Store, Lifecycle {
         mimeType: mimeType,
         append: append,
         documentId: documentId,
+        content: content,
       ),
     };
     final cancellation = Cancellation();
@@ -367,6 +370,7 @@ abstract class KycStoreBase with Store, Lifecycle {
       cancellation: cancellation,
       append: append,
       documentId: documentId,
+      content: content,
     );
     if (!isCurrent(request)) return false;
     return runInAction(() {
@@ -389,6 +393,7 @@ abstract class KycStoreBase with Store, Lifecycle {
             error: error,
             append: append,
             documentId: documentId,
+            content: content,
           ),
         };
       }
@@ -424,15 +429,26 @@ abstract class KycStoreBase with Store, Lifecycle {
       mimeType: attempt.mimeType,
       append: attempt.append,
       documentId: attempt.documentId,
+      content: attempt.content,
     );
   }
 
   @action
-  bool deleteDocument(String key, {String? documentId}) {
+  Future<bool> deleteDocument(String key, {String? documentId}) async {
     if (!editable || busy || isDisposed) return false;
-    return _accept(
-      _repository.deleteDocument(entity, key, documentId: documentId),
+    final request = beginRequest();
+    busy = true;
+    error = null;
+    final result = await _repository.deleteDocument(
+      entity,
+      key,
+      documentId: documentId,
     );
+    if (!isCurrent(request)) return false;
+    return runInAction(() {
+      busy = false;
+      return _accept(result);
+    });
   }
 
   @action

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PropertyStatus } from '../../firebase/domain.enums';
 import { randomUUID } from 'node:crypto';
@@ -220,12 +221,136 @@ export class LandownerService {
     return { id: draftKey, step, payload };
   }
 
+  async addDraftDocument(
+    userId: string,
+    draftKey: string,
+    data: {
+      key: string;
+      name: string;
+      mimeType: string;
+      sizeBytes: number;
+      storageKey: string;
+    },
+  ) {
+    const submissionId = this.draftId(userId, draftKey);
+    const draft = await this.firestore
+      .collection('submissionDrafts')
+      .doc(submissionId)
+      .get();
+    if (!draft.exists || draft.get('ownerId') !== userId) {
+      throw new NotFoundException('Submission draft not found.');
+    }
+    if (
+      !data.key.trim() ||
+      !data.name.trim() ||
+      !data.mimeType.trim() ||
+      !data.storageKey.startsWith(`landowner/${draftKey}/${userId}/`) ||
+      !Number.isSafeInteger(data.sizeBytes) ||
+      data.sizeBytes <= 0 ||
+      data.sizeBytes > 5 * 1024 * 1024
+    ) {
+      throw new BadRequestException('Document metadata is invalid.');
+    }
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new ServiceUnavailableException(
+        'FIREBASE_STORAGE_BUCKET must be configured for property uploads.',
+      );
+    }
+    const uploadedFile = this.firebase.storage
+      .bucket(bucketName)
+      .file(data.storageKey);
+    const [fileMetadata] = await uploadedFile.getMetadata();
+    if (
+      fileMetadata.metadata?.ownerId !== userId ||
+      Number(fileMetadata.size) !== data.sizeBytes ||
+      fileMetadata.contentType !== data.mimeType
+    ) {
+      throw new BadRequestException('The uploaded property file could not be verified.');
+    }
+    const sameKeySnapshot = await this.firestore
+      .collection('documents')
+      .where('submissionId', '==', submissionId)
+      .get();
+    const sameKey = sameKeySnapshot.docs.filter(
+      (document) =>
+        document.get('ownerId') === userId &&
+        document.get('key') === data.key,
+    );
+    const batch = this.firestore.batch();
+    for (const previous of sameKey) batch.delete(previous.ref);
+    const reference = this.firestore.collection('documents').doc();
+    batch.create(reference, {
+      submissionId,
+      ownerId: userId,
+      draftKey,
+      key: data.key,
+      name: data.name,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+      storageKey: data.storageKey,
+      createdAt: new Date(),
+    });
+    await batch.commit();
+    await this.deleteStoredFiles(sameKey);
+    return { id: reference.id };
+  }
+
+  async removeDraftDocument(userId: string, draftKey: string, key: string) {
+    const submissionId = this.draftId(userId, draftKey);
+    const draft = await this.firestore
+      .collection('submissionDrafts')
+      .doc(submissionId)
+      .get();
+    if (!draft.exists || draft.get('ownerId') !== userId) {
+      throw new NotFoundException('Submission draft not found.');
+    }
+    const documentSnapshot = await this.firestore
+      .collection('documents')
+      .where('submissionId', '==', submissionId)
+      .get();
+    const documents = documentSnapshot.docs.filter(
+      (document) =>
+        document.get('ownerId') === userId && document.get('key') === key,
+    );
+    await this.deleteStoredFiles(documents);
+    const batch = this.firestore.batch();
+    for (const document of documents) batch.delete(document.ref);
+    await batch.commit();
+    return { ok: true };
+  }
+
+  private async deleteStoredFiles(
+    documents: FirebaseFirestore.QueryDocumentSnapshot[],
+  ) {
+    const keys = documents
+      .map((document) => document.get('storageKey'))
+      .filter((key): key is string => typeof key === 'string' && key.length > 0);
+    if (keys.length === 0) return;
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new ServiceUnavailableException(
+        'FIREBASE_STORAGE_BUCKET must be configured to remove uploaded files.',
+      );
+    }
+    for (const key of keys) {
+      await this.firebase.storage
+        .bucket(bucketName)
+        .file(key)
+        .delete({ ignoreNotFound: true });
+    }
+  }
+
   async submit(userId: string, draftKey: string) {
     const draft = await this.firestore
       .collection('submissionDrafts')
       .doc(this.draftId(userId, draftKey))
       .get();
     const payload = (draft.get('payload') ?? {}) as Record<string, unknown>;
+    const documents = await this.firestore
+      .collection('documents')
+      .where('submissionId', '==', this.draftId(userId, draftKey))
+      .get();
     const size = payload.size;
     const propertyId = randomUUID();
     const property = {
@@ -249,6 +374,14 @@ export class LandownerService {
       fundingPercent: 0,
       draftStep: Number(draft.get('step') ?? 9),
       metadata: payload,
+      documents: documents.docs.map((document) => ({
+        id: document.id,
+        key: document.get('key'),
+        name: document.get('name'),
+        mimeType: document.get('mimeType'),
+        sizeBytes: document.get('sizeBytes'),
+        storageKey: document.get('storageKey'),
+      })),
       createdAt: new Date(),
       updatedAt: new Date(),
     };

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:developify_mobile/core/assets/app_assets.dart';
@@ -18,6 +20,8 @@ class UploadTile extends StatelessWidget {
     this.layout = UploadTileLayout.document,
     this.error,
     this.attachedTitle,
+    this.loading = false,
+    this.byteSize,
   });
   final VoidCallback onTap;
   final String title;
@@ -27,6 +31,8 @@ class UploadTile extends StatelessWidget {
   final VoidCallback? onRemove;
   final UploadTileLayout layout;
   final String? error;
+  final bool loading;
+  final int? byteSize;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +76,7 @@ class UploadTile extends StatelessWidget {
           color: document && attached ? AppColors.white : AppColors.surface,
           shape: shape,
           child: InkWell(
-            onTap: onTap,
+            onTap: loading ? null : onTap,
             borderRadius: BorderRadius.circular(12.w),
             child: CustomPaint(
               painter: document && attached
@@ -134,7 +140,15 @@ class UploadTile extends StatelessWidget {
                             padding: EdgeInsets.only(
                               top: attached && !document ? 3.w : 0,
                             ),
-                            child: attached
+                            child: loading
+                                ? SizedBox(
+                                    width: 28.w,
+                                    height: 28.w,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : attached
                                 ? AppIcon(
                                     AppAssets.payoutPdf,
                                     size: document
@@ -175,7 +189,9 @@ class UploadTile extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  attached
+                                  loading
+                                      ? 'Uploading file…'
+                                      : attached
                                       ? (attachedTitle ??
                                             (document ? fileName! : title))
                                       : title,
@@ -202,8 +218,16 @@ class UploadTile extends StatelessWidget {
                                 SizedBox(
                                   height: (document || trustees ? 4 : 7).w,
                                 ),
-                                if (attached)
-                                  const AttachmentStatus()
+                                if (loading)
+                                  Text(
+                                    'Please wait while the file is uploaded.',
+                                    style: AppTextStyles.text(
+                                      12,
+                                      color: AppColors.muted,
+                                    ),
+                                  )
+                                else if (attached)
+                                  AttachmentStatus(bytes: byteSize ?? 0)
                                 else
                                   Container(
                                     width: 62.w,
@@ -277,14 +301,17 @@ class UploadTile extends StatelessWidget {
 }
 
 class AttachmentStatus extends StatelessWidget {
-  const AttachmentStatus({super.key});
+  const AttachmentStatus({super.key, required this.bytes});
+  final int bytes;
   @override
   Widget build(BuildContext context) => Wrap(
     crossAxisAlignment: WrapCrossAlignment.center,
     spacing: 4.w,
     children: [
       Text(
-        '0 Kb of 120 Kb',
+        bytes < 1024 * 1024
+            ? '${(bytes / 1024).ceil()} KB'
+            : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB',
         style: AppTextStyles.text(
           14,
           color: AppColors.mutedSlate,
@@ -319,21 +346,38 @@ class DashedPhotoTile extends StatelessWidget {
     this.label,
     this.onRemove,
     this.asset,
+    this.imageBytes,
+    this.loading = false,
   });
   final VoidCallback onTap;
   final String? label;
   final VoidCallback? onRemove;
   final String? asset;
+  final Uint8List? imageBytes;
+  final bool loading;
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: label ?? 'Add site photos',
     onLongPress: onRemove,
     child: InkWell(
-      onTap: onTap,
+      onTap: loading ? null : onTap,
       onLongPress: onRemove,
       borderRadius: BorderRadius.circular(10.4.w),
-      child: asset != null
+      child: loading
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          : imageBytes != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(10.4.w),
+              child: Image.memory(
+                imageBytes!,
+                fit: BoxFit.cover,
+                width: 78.w,
+                height: 78.w,
+                excludeFromSemantics: true,
+              ),
+            )
+          : asset != null
           ? ClipRRect(
               borderRadius: BorderRadius.circular(10.4.w),
               child: Image.asset(

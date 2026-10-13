@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:developify_mobile/core/assets/app_assets.dart';
@@ -10,10 +12,31 @@ class ProfilePhotoControl extends StatelessWidget {
     required this.hasPhoto,
     required this.onChanged,
     this.photoAsset = AppAssets.avatar,
+    this.photoUrl,
+    this.photoBytes,
   });
   final bool hasPhoto;
   final VoidCallback onChanged;
   final String photoAsset;
+  final String? photoUrl;
+  final Uint8List? photoBytes;
+
+  Widget _photo() {
+    final fallback = hasPhoto
+        ? Image.asset(photoAsset, fit: BoxFit.cover)
+        : Image.asset(AppAssets.profileAvatarPlaceholder, fit: BoxFit.cover);
+    if (photoBytes case final bytes?) {
+      return Image.memory(bytes, fit: BoxFit.cover);
+    }
+    if (photoUrl case final url?) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback,
+      );
+    }
+    return fallback;
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -29,12 +52,7 @@ class ProfilePhotoControl extends StatelessWidget {
               left: (hasPhoto ? 6.85 : 6.35).w,
               top: 0,
               child: ClipOval(
-                child: Image.asset(
-                  hasPhoto ? photoAsset : AppAssets.profileAvatarPlaceholder,
-                  width: 84.w,
-                  height: 84.w,
-                  fit: BoxFit.cover,
-                ),
+                child: _photo(),
               ),
             ),
             Positioned(

@@ -108,14 +108,14 @@ abstract class SecurityStoreBase with Store, Lifecycle {
   void removeDevice(String id) {
     if (isDisposed || !previousDevices.contains(id)) return;
     previousDevices = previousDevices.where((value) => value != id).toList();
-    _savePreferences();
+    unawaited(_savePreferences());
   }
 
   @action
   void enableTwoFactor(bool value) {
     if (isDisposed) return;
     twoFactorEnabled = value;
-    _savePreferences();
+    unawaited(_savePreferences());
   }
 
   @action
@@ -140,7 +140,7 @@ abstract class SecurityStoreBase with Store, Lifecycle {
   void toggleBiometric(String key, bool value) {
     if (isDisposed || !biometrics.containsKey(key)) return;
     biometrics = Map.of(biometrics)..[key] = value;
-    _savePreferences();
+    unawaited(_savePreferences());
   }
 
   @action
@@ -173,13 +173,20 @@ abstract class SecurityStoreBase with Store, Lifecycle {
     super.dispose();
   }
 
-  void _savePreferences() => _repository.saveSecurityPreferences(
-    SecurityPreferences(
+  Future<void> _savePreferences() async {
+    final value = SecurityPreferences(
       biometrics: Map.unmodifiable(biometrics),
       twoFactorEnabled: twoFactorEnabled,
       previousDevices: List.unmodifiable(previousDevices),
-    ),
-  );
+    );
+    final result = await _repository.saveSecurityPreferences(value);
+    if (isDisposed || result is Success) return;
+    final failure = result as Failure<void>;
+    runInAction(() {
+      error = failure.error.message;
+      refreshPreferences();
+    });
+  }
 
   @action
   Future<bool> perform(String action) async {
@@ -226,7 +233,7 @@ abstract class SecurityStoreBase with Store, Lifecycle {
       if (action == 'change-password') {
         previousDevices = const [];
         expandedDevices = expandedDevices.intersection({'current'});
-        _savePreferences();
+        unawaited(_savePreferences());
       }
       return true;
     });

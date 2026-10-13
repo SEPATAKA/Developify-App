@@ -47,6 +47,8 @@ abstract class InvestmentStoreBase with Store, Lifecycle {
   final InvestorCatalogRepository _catalog;
   final InvestorAccountRepository _account;
   final InvestorDrafts _drafts;
+  bool get allowDemoBiometricAuthorization =>
+      _account.allowsDemoBiometricAuthorization;
   late final StreamSubscription<InvestorAccountChange> _changes;
   late final StreamSubscription<void> _catalogChanges;
   String _projectId = '';
@@ -291,6 +293,11 @@ abstract class InvestmentStoreBase with Store, Lifecycle {
     return runInAction(() {
       switch (result) {
         case Success(:final value):
+          if (value.status == InvestorTransactionStatus.failed) {
+            error = 'The investment request was declined. Please try again.';
+            stage = InvestmentStage.failure;
+            return false;
+          }
           receipt = value;
           stage = InvestmentStage.success;
           _drafts.clearInvestment(_projectId);

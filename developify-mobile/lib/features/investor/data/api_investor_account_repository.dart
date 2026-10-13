@@ -24,6 +24,17 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
   String get _entity => _context.entity.name;
 
   @override
+  Set<PaymentMethodKind> get supportedPaymentMethods => const {
+    PaymentMethodKind.bankAccount,
+  };
+
+  @override
+  bool get supportsManualEft => true;
+
+  @override
+  bool get allowsDemoBiometricAuthorization => false;
+
+  @override
   Stream<InvestorAccountChange> get changes => _changes.stream;
 
   @override
@@ -178,16 +189,6 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
     );
     if (result case Success(:final value)) {
       _snapshot = value;
-      _changes.add(
-        const InvestorAccountChange({
-          InvestorDataKind.wallet,
-          InvestorDataKind.portfolio,
-          InvestorDataKind.transactions,
-          InvestorDataKind.notifications,
-          InvestorDataKind.methods,
-          InvestorDataKind.verification,
-        }),
-      );
     }
     return result;
   }
@@ -212,7 +213,8 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
 
   @override
   Future<Result<InvestorNotification>> notification(String id) async {
-    final snap = _snapshot ??
+    final snap =
+        _snapshot ??
         ((await snapshot()) is Success<InvestorAccountSnapshot>
             ? (await snapshot() as Success<InvestorAccountSnapshot>).value
             : null);
@@ -239,6 +241,38 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
   String newOperationId() =>
       '${_context.entity.name}-operation-${DateTime.now().microsecondsSinceEpoch}-${++_sequence}';
 
+  InvestorOperationReceipt _mapReceipt(Object? json) {
+    final map = json as Map<String, Object?>? ?? const {};
+    final statusName = map['status'] as String? ?? 'pending';
+    final status = InvestorTransactionStatus.values.firstWhere(
+      (value) => value.name == statusName,
+      orElse: () => InvestorTransactionStatus.pending,
+    );
+    final rawInstructions = map['instructions'];
+    final instructions = rawInstructions is Map
+        ? Map<String, Object?>.from(rawInstructions)
+        : null;
+    return InvestorOperationReceipt(
+      transactionId:
+          map['id'] as String? ??
+          map['transactionId'] as String? ??
+          map['receiptId'] as String? ??
+          '',
+      investmentId: map['investmentId'] as String?,
+      status: status,
+      paymentInstructions: instructions == null
+          ? null
+          : InvestorPaymentInstructions(
+              bank: instructions['bank'] as String? ?? '',
+              accountNumber: instructions['accountNumber'] as String? ?? '',
+              branchCode: instructions['branchCode'] as String? ?? '',
+              reference: instructions['reference'] as String? ?? '',
+              amountCents: int.tryParse('${instructions['amountCents']}') ?? 0,
+              note: instructions['note'] as String? ?? '',
+            ),
+    );
+  }
+
   @override
   Future<Result<InvestorOperationReceipt>> invest({
     required InvestorProject project,
@@ -248,7 +282,6 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
     InvestmentProjection? quote,
     bool simulateBiometric = false,
   }) async {
-    String? quoteId;
     final quoteResult = await _client.request<Object?>(
       path: '/v1/investments/quotes',
       method: 'POST',
@@ -259,8 +292,26 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       },
       decode: (json) => json,
     );
-    if (quoteResult case Success(:final value)) {
-      quoteId = (value as Map<String, Object?>)['id'] as String?;
+    if (quoteResult case Failure(:final error)) {
+      return Failure(error);
+    }
+    final quoteResponse = (quoteResult as Success<Object?>).value;
+    if (quoteResponse is! Map || quoteResponse['id'] is! String) {
+      return const Failure(
+        AppFailure(
+          FailureKind.server,
+          'The investment quote response was incomplete. Please try again.',
+        ),
+      );
+    }
+    final quoteId = (quoteResponse['id'] as String).trim();
+    if (quoteId.isEmpty) {
+      return const Failure(
+        AppFailure(
+          FailureKind.server,
+          'The investment quote response was incomplete. Please try again.',
+        ),
+      );
     }
     final result = await _client.request<Object?>(
       path: '/v1/investments',
@@ -276,16 +327,17 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       decode: (json) => json,
     );
     if (result case Success(:final value)) {
-      final map = value as Map<String, Object?>? ?? const {};
+      final receipt = _mapReceipt(value);
+      if (receipt.transactionId.isEmpty) {
+        return const Failure(
+          AppFailure(
+            FailureKind.server,
+            'The investment confirmation response was incomplete.',
+          ),
+        );
+      }
       await snapshot();
-      return Success(
-        InvestorOperationReceipt(
-          transactionId: map['transactionId'] as String? ??
-              map['receiptId'] as String? ??
-              '',
-          investmentId: map['investmentId'] as String?,
-        ),
-      );
+      return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
   }
@@ -311,13 +363,17 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       decode: (json) => json,
     );
     if (result case Success(:final value)) {
-      final map = value as Map<String, Object?>? ?? const {};
+      final receipt = _mapReceipt(value);
+      if (receipt.transactionId.isEmpty) {
+        return const Failure(
+          AppFailure(
+            FailureKind.server,
+            'The deposit response was incomplete.',
+          ),
+        );
+      }
       await snapshot();
-      return Success(
-        InvestorOperationReceipt(
-          transactionId: map['id'] as String? ?? '',
-        ),
-      );
+      return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
   }
@@ -343,13 +399,17 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       decode: (json) => json,
     );
     if (result case Success(:final value)) {
-      final map = value as Map<String, Object?>? ?? const {};
+      final receipt = _mapReceipt(value);
+      if (receipt.transactionId.isEmpty) {
+        return const Failure(
+          AppFailure(
+            FailureKind.server,
+            'The withdrawal response was incomplete.',
+          ),
+        );
+      }
       await snapshot();
-      return Success(
-        InvestorOperationReceipt(
-          transactionId: map['id'] as String? ?? '',
-        ),
-      );
+      return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
   }
@@ -361,18 +421,12 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
     required String expiry,
     required String securityCode,
     bool reusable = true,
-  }) {
-    return _client.request(
-      path: '/v1/wallet/payment-methods/card',
-      method: 'POST',
-      data: {
-        'cardNumber': cardNumber,
-        'holder': holder,
-        'expiry': expiry,
-        'securityCode': securityCode,
-        'reusable': reusable,
-      },
-      decode: _mapMethod,
+  }) async {
+    return const Failure(
+      AppFailure(
+        FailureKind.configuration,
+        'Card payments are not enabled. Use manual EFT with a bank account.',
+      ),
     );
   }
 

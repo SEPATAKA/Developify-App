@@ -33,6 +33,12 @@ abstract class PaymentMethodsStoreBase with Store, Lifecycle {
   final InvestorAccountRepository _repository;
   late final StreamSubscription<InvestorAccountChange> _changes;
   int _loadVersion = 0;
+  bool get cardPaymentsEnabled =>
+      _repository.supportedPaymentMethods.contains(PaymentMethodKind.card);
+  PaymentMethodKind get defaultMethodKind => cardPaymentsEnabled
+      ? PaymentMethodKind.card
+      : PaymentMethodKind.bankAccount;
+
   @observable
   LoadStatus status = LoadStatus.initial;
   @observable

@@ -35,6 +35,18 @@ class PaymentMethodsContent extends StatelessWidget {
       Observer(builder: (_) => _content(context));
 
   Widget _content(BuildContext context) {
+    if (kind == PaymentMethodKind.card && !store.cardPaymentsEnabled) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 28.w),
+          child: Text(
+            'Card payments are not enabled. Add a bank account to use manual EFT.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body,
+          ),
+        ),
+      );
+    }
     if ((store.status == LoadStatus.initial ||
             store.status == LoadStatus.loading) &&
         store.methods.isEmpty) {

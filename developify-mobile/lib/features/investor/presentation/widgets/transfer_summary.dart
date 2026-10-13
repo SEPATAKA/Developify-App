@@ -38,10 +38,12 @@ class TransferReview extends StatelessWidget {
     required this.amount,
     required this.fee,
     required this.method,
+    this.manualEft = false,
   });
   final MonetaryAmount amount;
   final MonetaryAmount fee;
   final InvestorPaymentMethod? method;
+  final bool manualEft;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -108,7 +110,9 @@ class TransferReview extends StatelessWidget {
           SizedBox(width: 6.w),
           Expanded(
             child: Text(
-              method?.kind == PaymentMethodKind.bankAccount
+              manualEft
+                  ? 'This creates a pending deposit request. Transfer funds using the reference provided after submission; your wallet is credited after admin confirmation.'
+                  : method?.kind == PaymentMethodKind.bankAccount
                   ? 'This adds simulated funds to your demo wallet. No bank transfer is made.'
                   : 'This payment is simulated. Card details are not sent and the CVV is not retained.',
               style: AppTextStyles.text(

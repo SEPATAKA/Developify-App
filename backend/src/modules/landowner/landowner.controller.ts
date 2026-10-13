@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { PropertyStatus } from '../../firebase/domain.enums';
 import { LandownerService } from './landowner.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
@@ -44,6 +52,31 @@ export class LandownerController {
       body.step ?? 1,
       body.payload ?? {},
     );
+  }
+
+  @Post('drafts/:draftKey/documents')
+  addDraftDocument(
+    @CurrentUser() user: AuthUser,
+    @Param('draftKey') draftKey: string,
+    @Body()
+    body: {
+      key: string;
+      name: string;
+      mimeType: string;
+      sizeBytes: number;
+      storageKey: string;
+    },
+  ) {
+    return this.landowner.addDraftDocument(user.id, draftKey, body);
+  }
+
+  @Delete('drafts/:draftKey/documents/:key')
+  removeDraftDocument(
+    @CurrentUser() user: AuthUser,
+    @Param('draftKey') draftKey: string,
+    @Param('key') key: string,
+  ) {
+    return this.landowner.removeDraftDocument(user.id, draftKey, key);
   }
 
   @Post('submit')

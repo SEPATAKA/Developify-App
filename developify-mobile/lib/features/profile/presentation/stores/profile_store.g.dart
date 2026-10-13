@@ -114,24 +114,6 @@ mixin _$ProfileStore on ProfileStoreBase, Store {
     });
   }
 
-  late final _$samplePhotoSelectedAtom = Atom(
-    name: 'ProfileStoreBase.samplePhotoSelected',
-    context: context,
-  );
-
-  @override
-  bool get samplePhotoSelected {
-    _$samplePhotoSelectedAtom.reportRead();
-    return super.samplePhotoSelected;
-  }
-
-  @override
-  set samplePhotoSelected(bool value) {
-    _$samplePhotoSelectedAtom.reportWrite(value, super.samplePhotoSelected, () {
-      super.samplePhotoSelected = value;
-    });
-  }
-
   late final _$preferencesAtom = Atom(
     name: 'ProfileStoreBase.preferences',
     context: context,
@@ -176,6 +158,16 @@ mixin _$ProfileStore on ProfileStoreBase, Store {
   @override
   Future<void> load() {
     return _$loadAsyncAction.run(() => super.load());
+  }
+
+  late final _$selectPhotoAsyncAction = AsyncAction(
+    'ProfileStoreBase.selectPhoto',
+    context: context,
+  );
+
+  @override
+  Future<bool> selectPhoto(PickedLocalFile file) {
+    return _$selectPhotoAsyncAction.run(() => super.selectPhoto(file));
   }
 
   late final _$saveAsyncAction = AsyncAction(
@@ -232,18 +224,6 @@ mixin _$ProfileStore on ProfileStoreBase, Store {
   }
 
   @override
-  void selectPhoto() {
-    final _$actionInfo = _$ProfileStoreBaseActionController.startAction(
-      name: 'ProfileStoreBase.selectPhoto',
-    );
-    try {
-      return super.selectPhoto();
-    } finally {
-      _$ProfileStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
   void setEntity(EntityType entity) {
     final _$actionInfo = _$ProfileStoreBaseActionController.startAction(
       name: 'ProfileStoreBase.setEntity',
@@ -264,7 +244,6 @@ error: ${error},
 errors: ${errors},
 saving: ${saving},
 dirty: ${dirty},
-samplePhotoSelected: ${samplePhotoSelected},
 preferences: ${preferences},
 payoutAccount: ${payoutAccount}
     ''';

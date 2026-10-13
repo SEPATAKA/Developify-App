@@ -235,7 +235,7 @@ void main() {
             .store
             .user!
             .hasProfilePhoto,
-        isTrue,
+        isFalse,
       );
       await tester.enterText(
         find.byKey(const ValueKey('field-Full Name')),
@@ -249,7 +249,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('profile-save')));
       await tester.pumpAndSettle();
       expect(deps.session.user!.name, 'Themba Nkosi');
-      expect(deps.session.user!.hasProfilePhoto, isTrue);
+      expect(deps.session.user!.hasProfilePhoto, isFalse);
       expect(deps.session.user!.countryCode, 'GB');
       router.go('/profile/edit');
       await tester.pumpAndSettle();
