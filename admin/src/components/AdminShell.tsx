@@ -14,6 +14,7 @@ const links = [
   { href: '/properties', label: 'Properties' },
   { href: '/projects', label: 'Projects' },
   { href: '/transactions', label: 'Transactions' },
+  { href: '/support', label: 'Support chat' },
   { href: '/audit', label: 'Audit Log' },
   { href: '/config', label: 'Config' },
 ];
@@ -80,19 +81,26 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
           <nav className="space-y-1">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`block rounded px-3 py-2 text-sm ${
-                  pathname.startsWith(link.href)
-                    ? 'bg-emerald-50 font-medium text-emerald-800'
-                    : 'text-zinc-700 hover:bg-zinc-100'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {links
+              .filter(
+                (link) =>
+                  link.href !== '/support' ||
+                  role === 'admin' ||
+                  role === 'ops',
+              )
+              .map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`block rounded px-3 py-2 text-sm ${
+                    pathname.startsWith(link.href)
+                      ? 'bg-emerald-50 font-medium text-emerald-800'
+                      : 'text-zinc-700 hover:bg-zinc-100'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
           </nav>
           <button
             className="mt-8 w-full rounded border border-zinc-300 px-3 py-2 text-sm"

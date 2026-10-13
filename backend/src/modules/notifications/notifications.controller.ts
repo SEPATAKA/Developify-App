@@ -1,6 +1,11 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
-import { AuthUser, CurrentUser, Public, Roles } from '../common/auth.decorators';
+import {
+  AuthUser,
+  CurrentUser,
+  Public,
+  Roles,
+} from '../common/auth.decorators';
 
 @Controller('notifications')
 export class NotificationsController {
@@ -70,6 +75,24 @@ export class NotificationsController {
 @Controller('admin/notifications')
 export class AdminNotificationsController {
   constructor(private notifications: NotificationsService) {}
+
+  @Roles('admin', 'ops')
+  @Get('chat/conversations')
+  conversations() {
+    return this.notifications.chatConversations();
+  }
+
+  @Roles('admin', 'ops')
+  @Get('chat/:userId/messages')
+  messages(@Param('userId') userId: string) {
+    return this.notifications.supportMessages(userId);
+  }
+
+  @Roles('admin', 'ops')
+  @Post('chat/:userId/messages')
+  reply(@Param('userId') userId: string, @Body() body: { text: string }) {
+    return this.notifications.sendSupportMessage(userId, body?.text);
+  }
 
   @Roles('admin', 'ops')
   @Post('broadcast')

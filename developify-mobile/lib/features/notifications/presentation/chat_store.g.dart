@@ -99,8 +99,8 @@ mixin _$ChatStore on ChatStoreBase, Store {
   );
 
   @override
-  Future<void> load() {
-    return _$loadAsyncAction.run(() => super.load());
+  Future<void> load({bool silent = false}) {
+    return _$loadAsyncAction.run(() => super.load(silent: silent));
   }
 
   late final _$sendAsyncAction = AsyncAction(

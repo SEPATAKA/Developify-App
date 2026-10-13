@@ -102,8 +102,16 @@ export class NotificationsService {
   }
 
   async sendMessage(userId: string, text: string) {
+    if (typeof text !== 'string') {
+      throw new BadRequestException('Message text is required.');
+    }
     const messageText = text.trim();
     if (!messageText) throw new BadRequestException('Message cannot be empty.');
+    if (messageText.length > 2000) {
+      throw new BadRequestException(
+        'Messages must be 2000 characters or fewer.',
+      );
+    }
     const createdAt = new Date();
     const message = await this.firebase.firestore
       .collection('chatMessages')
@@ -112,6 +120,96 @@ export class NotificationsService {
       id: message.id,
       text: messageText,
       fromSupport: false,
+      createdAt: createdAt.toISOString(),
+    };
+  }
+
+  async chatConversations() {
+    const db = this.firebase.firestore;
+    const rows = await db
+      .collection('chatMessages')
+      .orderBy('createdAt', 'desc')
+      .limit(1000)
+      .get();
+    const latestByUser = new Map<
+      string,
+      FirebaseFirestore.QueryDocumentSnapshot
+    >();
+    for (const message of rows.docs) {
+      const userId = message.get('userId');
+      if (typeof userId === 'string' && !latestByUser.has(userId)) {
+        latestByUser.set(userId, message);
+      }
+    }
+    const conversations = [...latestByUser.entries()].slice(0, 200);
+    const profiles = await Promise.all(
+      conversations.map(([userId]) => db.collection('users').doc(userId).get()),
+    );
+    return conversations.map(([userId, message], index) => {
+      const profile = profiles[index];
+      const user = profile.data() ?? {};
+      return {
+        userId,
+        name: String(user.name ?? ''),
+        email: String(user.email ?? ''),
+        lastMessage: {
+          id: message.id,
+          text: String(message.get('text') ?? ''),
+          fromSupport: message.get('fromSupport') === true,
+          createdAt: this.toIso(message.get('createdAt')),
+        },
+      };
+    });
+  }
+
+  async supportMessages(userId: string) {
+    const profile = await this.firebase.firestore
+      .collection('users')
+      .doc(userId)
+      .get();
+    if (!profile.exists) throw new NotFoundException('User profile not found.');
+    const rows = await this.firebase.firestore
+      .collection('chatMessages')
+      .where('userId', '==', userId)
+      .limit(200)
+      .get();
+    return rows.docs
+      .sort(
+        (left, right) =>
+          left.get('createdAt').toMillis() - right.get('createdAt').toMillis(),
+      )
+      .map((message) => ({
+        id: message.id,
+        text: String(message.get('text') ?? ''),
+        fromSupport: message.get('fromSupport') === true,
+        createdAt: this.toIso(message.get('createdAt')),
+      }));
+  }
+
+  async sendSupportMessage(userId: string, text: string) {
+    if (typeof text !== 'string') {
+      throw new BadRequestException('Message text is required.');
+    }
+    const messageText = text.trim();
+    if (!messageText) throw new BadRequestException('Message cannot be empty.');
+    if (messageText.length > 2000) {
+      throw new BadRequestException(
+        'Messages must be 2000 characters or fewer.',
+      );
+    }
+    const user = await this.firebase.firestore
+      .collection('users')
+      .doc(userId)
+      .get();
+    if (!user.exists) throw new NotFoundException('User profile not found.');
+    const createdAt = new Date();
+    const message = await this.firebase.firestore
+      .collection('chatMessages')
+      .add({ userId, text: messageText, fromSupport: true, createdAt });
+    return {
+      id: message.id,
+      text: messageText,
+      fromSupport: true,
       createdAt: createdAt.toISOString(),
     };
   }

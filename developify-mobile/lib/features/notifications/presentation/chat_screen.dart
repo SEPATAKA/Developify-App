@@ -22,14 +22,20 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  Timer? _refreshTimer;
   @override
   void initState() {
     super.initState();
     unawaited(widget.store.load());
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => unawaited(widget.store.load(silent: true)),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _input.dispose();
     _scroll.dispose();
     widget.store.dispose();
@@ -126,12 +132,6 @@ class _ChatScreenState extends State<ChatScreen> {
               if (widget.store.status == LoadStatus.loading) {
                 return const LoadingView();
               }
-              if (widget.store.status == LoadStatus.error) {
-                return ErrorView(
-                  message: widget.store.error!,
-                  onRetry: widget.store.load,
-                );
-              }
               return ListView.builder(
                 controller: _scroll,
                 padding: EdgeInsets.fromLTRB(24.w, 26.w, 23.w, 20.w),
@@ -170,6 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     controller: _input,
                     onChanged: widget.store.setDraft,
                     onSubmitted: (_) => _send(),
+                    maxLength: 2000,
                     style: AppTextStyles.text(14, height: 16 / 14),
                     textAlignVertical: TextAlignVertical.center,
                     decoration: InputDecoration(
