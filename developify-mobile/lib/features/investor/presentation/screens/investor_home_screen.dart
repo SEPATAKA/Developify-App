@@ -80,10 +80,16 @@ class InvestorHomeScreen extends StatelessWidget {
               showTrendIcon: true,
               amount: InvestorAccountSummary.from(data).overallBalance,
               visible: store.balanceVisible,
-              showAmount: hasData,
+              showAmount: true,
+              amountPlaceholder: hasData
+                  ? null
+                  : store.status == LoadStatus.error
+                  ? 'Balance unavailable'
+                  : 'Loading balance…',
               onToggle: store.toggleBalance,
-              change:
-                  '${Money.amount(portfolio.projectedReturns, showPositiveSign: true)} projected returns',
+              change: hasData
+                  ? '${Money.amount(portfolio.projectedReturns, showPositiveSign: true)} projected returns'
+                  : null,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -159,18 +165,27 @@ class InvestorHomeScreen extends StatelessWidget {
           child: Column(
             children: [
               if (!hasData && store.status == LoadStatus.error)
-                Padding(
-                  padding: EdgeInsets.only(bottom: 12.w),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      width: 180.w,
-                      child: AppButton(
-                        label: 'Try again',
-                        onPressed: store.load,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (store.error != null) ...[
+                      InlineError(store.error),
+                      SizedBox(height: 8.w),
+                    ],
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 12.w),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: 180.w,
+                          child: AppButton(
+                            label: 'Try again',
+                            onPressed: store.load,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               if (hasData && store.error != null) ...[
                 InlineError(store.error),

@@ -436,6 +436,7 @@ class InvestorBalanceHeader extends StatelessWidget {
     this.fractionColor = AppColors.primary,
     this.showTrendIcon = false,
     this.showAmount = true,
+    this.amountPlaceholder,
   });
   final String title;
   final MonetaryAmount amount;
@@ -454,10 +455,12 @@ class InvestorBalanceHeader extends StatelessWidget {
   final Color fractionColor;
   final bool showTrendIcon;
   final bool showAmount;
+  final String? amountPlaceholder;
   @override
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
     final amountString = Money.amount(amount);
+    final displayedAmount = amountPlaceholder ?? amountString;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: RepaintBoundary(
@@ -536,13 +539,23 @@ class InvestorBalanceHeader extends StatelessWidget {
                 maintainState: true,
                 child: Semantics(
                   label: title,
-                  value: visible ? amountString : 'Hidden',
+                  value: visible ? displayedAmount : 'Hidden',
                   child: ExcludeSemantics(
-                    child: _BalanceAmount(
-                      amount: amountString,
-                      visible: visible,
-                      fractionColor: fractionColor,
-                    ),
+                    child: amountPlaceholder == null
+                        ? _BalanceAmount(
+                            amount: amountString,
+                            visible: visible,
+                            fractionColor: fractionColor,
+                          )
+                        : Text(
+                            visible ? amountPlaceholder! : '****',
+                            style: AppTextStyles.text(
+                              22,
+                              weight: FontWeight.w600,
+                              color: AppColors.white,
+                              letterSpacing: -.56,
+                            ),
+                          ),
                   ),
                 ),
               ),

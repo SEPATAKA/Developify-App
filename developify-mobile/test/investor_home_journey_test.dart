@@ -90,8 +90,15 @@ void main() {
       tester
           .widget<InvestorBalanceHeader>(find.byType(InvestorBalanceHeader))
           .showAmount,
-      isFalse,
+      isTrue,
     );
+    expect(
+      tester
+          .widget<InvestorBalanceHeader>(find.byType(InvestorBalanceHeader))
+          .amountPlaceholder,
+      'Balance unavailable',
+    );
+    expect(find.text('Balance unavailable'), findsOneWidget);
     expect(find.text('Babatunde Yusuf'), findsOneWidget);
     expect(find.text('Featured projects'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
