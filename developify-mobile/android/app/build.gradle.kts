@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -44,4 +46,30 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    if (name == "compileReleaseJavaWithJavac") {
+        doFirst {
+            val registrant = layout.projectDirectory.file(
+                "src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+            ).asFile
+            val source = registrant.readText()
+            val releaseOnlyFilter = Regex(
+                """(?ms)^\s*try \{\r?\n\s*flutterEngine\.getPlugins\(\)\.add\(new dev\.flutter\.plugins\.integration_test\.IntegrationTestPlugin\(\)\);\r?\n\s*\} catch \(Exception e\) \{\r?\n\s*Log\.e\(TAG, "Error registering plugin integration_test, dev\.flutter\.plugins\.integration_test\.IntegrationTestPlugin", e\);\r?\n\s*\}\r?\n""",
+            )
+            val filteredSource = source.replace(releaseOnlyFilter, "")
+            if (
+                filteredSource == source &&
+                source.contains("dev.flutter.plugins.integration_test.IntegrationTestPlugin")
+            ) {
+                throw GradleException(
+                    "Could not exclude the test-only integration_test plugin from the release registrant.",
+                )
+            }
+            if (filteredSource != source) {
+                registrant.writeText(filteredSource)
+            }
+        }
+    }
 }
