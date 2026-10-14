@@ -111,6 +111,8 @@ export class WalletService {
       this.firestore
         .collection('transactions')
         .where('entityId', '==', entity.id)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
         .get(),
       this.firestore
         .collection('paymentMethods')
@@ -119,6 +121,8 @@ export class WalletService {
       this.firestore
         .collection('notifications')
         .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(100)
         .get(),
     ]);
 
@@ -135,14 +139,10 @@ export class WalletService {
           data.principalHeld && data.status === InvestmentStatus.active,
       )
       .reduce((sum, { data }) => sum + Number(data.amountCents), 0);
-    const transactions = transactionSnapshot.docs
-      .map((doc) => ({ id: doc.id, data: doc.data() }))
-      .sort(
-        (a, b) =>
-          firestoreDate(b.data.createdAt).getTime() -
-          firestoreDate(a.data.createdAt).getTime(),
-      )
-      .slice(0, 50);
+    const transactions = transactionSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data(),
+    }));
     const methods = methodSnapshot.docs
       .map((doc) => ({ id: doc.id, data: doc.data() }))
       .sort(

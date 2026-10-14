@@ -39,19 +39,20 @@ export class LedgerService {
     fields: { entityId?: string } = {},
   ) {
     const reference = this.firestore.collection('ledgerAccounts').doc(id);
-    await this.firestore.runTransaction(async (transaction) => {
+    const account = await this.firestore.runTransaction(async (transaction) => {
       const existing = await transaction.get(reference);
-      if (existing.exists) return;
-      transaction.create(reference, {
+      if (existing.exists) return existing.data()!;
+      const created = {
         type,
         currency: 'ZAR',
         balanceCents: 0,
         ...fields,
         createdAt: new Date(),
-      });
+      };
+      transaction.create(reference, created);
+      return created;
     });
-    const account = await reference.get();
-    return { id: account.id, ...account.data() };
+    return { id, ...account };
   }
 
   async balanceCents(accountId: string): Promise<bigint> {
