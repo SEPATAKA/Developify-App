@@ -25,14 +25,12 @@ import 'package:developify_mobile/features/investor/presentation/stores/kyc_stor
 import 'package:developify_mobile/features/investor/presentation/stores/kyc_member_store.dart';
 import 'package:developify_mobile/features/investor/presentation/stores/wallet_store.dart';
 import 'package:developify_mobile/features/investor/presentation/stores/investor_home_store.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
-import 'package:developify_mobile/firebase_options.dart';
+import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/network/api_client.dart';
 import 'package:developify_mobile/core/services/mock_behavior.dart';
 import 'package:developify_mobile/core/services/push_notification_service.dart';
@@ -40,7 +38,6 @@ import 'package:developify_mobile/core/services/session_service.dart';
 import 'package:developify_mobile/core/services/telemetry.dart';
 import 'package:developify_mobile/core/storage/token_storage.dart';
 import 'package:developify_mobile/features/authentication/data/api_auth_repository.dart';
-import 'package:developify_mobile/features/authentication/data/firebase_user_profile_repository.dart';
 import 'package:developify_mobile/features/authentication/data/mock_auth_repository.dart';
 import 'package:developify_mobile/features/authentication/domain/auth_repository.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/auth_store.dart';
@@ -68,9 +65,11 @@ import 'package:developify_mobile/features/profile/presentation/stores/payout_st
 import 'package:developify_mobile/features/profile/presentation/stores/profile_store.dart';
 import 'package:developify_mobile/features/profile/presentation/stores/security_store.dart';
 import 'package:developify_mobile/features/shared/presentation/experience_store.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final class AppDependencies {
   AppDependencies._(this.container);
+  static bool _supabaseInitialized = false;
   final GetIt container;
   SessionService get session => container<SessionService>();
   PushNotificationService get push => container<PushNotificationService>();
@@ -95,46 +94,23 @@ final class AppDependencies {
         (environment.mockMode
             ? MemoryTokenStorage()
             : SecureTokenStorage(const FlutterSecureStorage()));
-    final firebaseApp = environment.firebaseEnabled
-        ? Firebase.apps.isEmpty
-              ? await Firebase.initializeApp(
-                  options: DefaultFirebaseOptions.currentPlatform,
-                )
-              : Firebase.app()
-        : null;
-    final services =
-        telemetry ??
-        await TelemetryServices.initialize(
-          environment,
-          options: environment.firebaseEnabled
-              ? DefaultFirebaseOptions.currentPlatform
-              : null,
+    SupabaseClient? supabaseClient;
+    if (!environment.mockMode) {
+      if (!environment.supabaseEnabled) {
+        throw StateError(
+          'Live mode requires SUPABASE_ANON_KEY for Supabase Authentication.',
         );
-    final firebaseAuth = firebaseApp == null
-        ? null
-        : FirebaseAuth.instanceFor(app: firebaseApp);
-    if (firebaseAuth != null) {
-      final firestore = FirebaseFirestore.instanceFor(app: firebaseApp!);
-      final profiles = FirebaseUserProfileRepository(firestore);
-      final firebaseUser = await firebaseAuth.authStateChanges().first.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => firebaseAuth.currentUser,
-      );
-      if (firebaseUser?.emailVerified == true) {
-        try {
-          final profile = await profiles.findFor(firebaseUser!);
-          if (profile != null) {
-            sessionService.signIn(profile, experience: Experience.investor);
-          }
-        } on FirebaseException catch (error) {
-          if (kDebugMode) {
-            debugPrint(
-              'Could not restore Firebase user profile: ${error.code}',
-            );
-          }
-        }
       }
+      if (!_supabaseInitialized) {
+        await Supabase.initialize(
+          url: environment.supabaseUrl,
+          publishableKey: environment.supabaseAnonKey,
+        );
+        _supabaseInitialized = true;
+      }
+      supabaseClient = Supabase.instance.client;
     }
+    final services = telemetry ?? await TelemetryServices.initialize();
     final push = OneSignalPushService(environment.oneSignalAppId);
     await push.initialize();
     final useApi = !environment.mockMode && environment.apiUri != null;
@@ -144,9 +120,9 @@ final class AppDependencies {
       dispose: (value) => value.dispose(),
     );
     get.registerSingleton<TokenStorage>(tokens);
-    final authTokenProvider = firebaseAuth == null
+    final authTokenProvider = supabaseClient == null
         ? tokens
-        : FirebaseAuthTokenProvider(firebaseAuth);
+        : SupabaseAuthTokenProvider(supabaseClient);
     get.registerSingleton<AuthTokenProvider>(authTokenProvider);
     get.registerSingleton<TelemetryServices>(services);
     get.registerSingleton<AnalyticsService>(services.analytics);
@@ -161,6 +137,32 @@ final class AppDependencies {
       environment: environment,
       tokens: authTokenProvider,
     );
+    if (supabaseClient != null) {
+      final restored = await apiClient.request<Object?>(
+        path: '/v1/auth/me',
+        decode: (json) => json,
+      );
+      if (restored case Success(:final value)) {
+        final map = Map<String, Object?>.from(value as Map);
+        sessionService.signIn(
+          AppUser(
+            id: map['id'] as String? ?? '',
+            name: map['name'] as String? ?? '',
+            email: map['email'] as String? ?? '',
+            phone: map['phone'] as String? ?? '',
+            address: map['address'] as String? ?? '',
+            entity: EntityType.values.firstWhere(
+              (entity) => entity.name == map['entity'],
+              orElse: () => EntityType.individual,
+            ),
+            hasProfilePhoto: map['hasProfilePhoto'] as bool? ?? false,
+            countryCode: map['countryCode'] as String? ?? 'ZA',
+            nonResident: map['nonResident'] as bool? ?? false,
+          ),
+          experience: Experience.investor,
+        );
+      }
+    }
     get.registerSingleton<ApiClient>(
       apiClient,
       dispose: (value) => value.dispose(),
@@ -178,15 +180,13 @@ final class AppDependencies {
       final configuredAuthRepo = ApiAuthRepository(
         apiClient,
         tokens,
-        firebaseAuth: firebaseAuth,
-        firebaseProfiles: firebaseApp == null
-            ? null
-            : FirebaseUserProfileRepository(
-                FirebaseFirestore.instanceFor(app: firebaseApp),
-              ),
+        supabase: supabaseClient!,
       );
       apiClient.setRefreshHandler(configuredAuthRepo.refreshSession);
-      get.registerSingleton<AuthRepository>(configuredAuthRepo);
+      get.registerSingleton<AuthRepository>(
+        configuredAuthRepo,
+        dispose: (value) => value.dispose(),
+      );
       get.registerSingleton<TransactionAuthorization>(
         ApiTransactionAuthorization(sessionService, apiClient),
         dispose: (value) => value.dispose(),
@@ -253,6 +253,7 @@ final class AppDependencies {
       );
       get.registerSingleton<AuthRepository>(
         MockAuthRepository(MockBehavior.fromEnvironment(environment)),
+        dispose: (value) => value.dispose(),
       );
       get.registerSingleton<LandownerRepository>(
         MockLandownerRepository(

@@ -5,10 +5,7 @@ import 'package:developify_mobile/core/network/api_client.dart';
 import 'package:developify_mobile/core/storage/picked_local_file.dart';
 
 abstract interface class DocumentUploader {
-  Future<Result<String>> upload(
-    PickedLocalFile file, {
-    required String prefix,
-  });
+  Future<Result<String>> upload(PickedLocalFile file, {required String prefix});
   Future<Result<void>> delete(String storageKey);
 }
 
@@ -30,11 +27,19 @@ final class ApiDocumentUploader implements DocumentUploader {
     PickedLocalFile file, {
     required String prefix,
   }) async {
-    if (file.bytes.isEmpty || file.bytes.length > maxBytes) {
+    if (file.bytes.isEmpty) {
       return const Failure(
         AppFailure(
           FailureKind.validation,
-          'Choose a file smaller than 5 MB.',
+          'The selected file is empty. Choose another file.',
+        ),
+      );
+    }
+    if (file.bytes.length > maxBytes) {
+      return const Failure(
+        AppFailure(
+          FailureKind.validation,
+          'Choose a file no larger than 5 MB.',
         ),
       );
     }

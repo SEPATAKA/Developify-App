@@ -6,13 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import { SupabaseDataService } from '../../supabase/supabase-data.service';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly config: ConfigService,
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
   ) {}
 
   async createUploadUrl(params: {
@@ -20,15 +20,11 @@ export class DocumentsService {
     name: string;
     prefix: string;
   }) {
-    const bucketName = this.config.get<string>('FIREBASE_STORAGE_BUCKET');
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured for document uploads.',
-      );
-    }
+    const bucketName =
+      this.config.get<string>('SUPABASE_STORAGE_BUCKET') ?? 'developify-private';
 
     const storageKey = `${params.prefix}/${randomUUID()}-${params.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const [uploadUrl] = await this.firebase.storage
+    const [uploadUrl] = await this.supabase.storage
       .bucket(bucketName)
       .file(storageKey)
       .getSignedUrl({
@@ -47,12 +43,8 @@ export class DocumentsService {
     ownerId: string;
     prefix: string;
   }) {
-    const bucketName = this.config.get<string>('FIREBASE_STORAGE_BUCKET');
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured for document uploads.',
-      );
-    }
+    const bucketName =
+      this.config.get<string>('SUPABASE_STORAGE_BUCKET') ?? 'developify-private';
     if (
       !/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(params.prefix) ||
       !params.name.trim() ||
@@ -84,7 +76,7 @@ export class DocumentsService {
     }
 
     const storageKey = `${params.prefix}/${randomUUID()}-${params.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    await this.firebase.storage
+    await this.supabase.storage
       .bucket(bucketName)
       .file(storageKey)
       .save(content, {
@@ -98,16 +90,12 @@ export class DocumentsService {
   }
 
   async deleteUploaded(ownerId: string, storageKey: string) {
-    const bucketName = this.config.get<string>('FIREBASE_STORAGE_BUCKET');
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured to remove uploaded files.',
-      );
-    }
+    const bucketName =
+      this.config.get<string>('SUPABASE_STORAGE_BUCKET') ?? 'developify-private';
     if (typeof storageKey !== 'string' || !storageKey.trim()) {
       throw new BadRequestException('A storage key is required.');
     }
-    const file = this.firebase.storage.bucket(bucketName).file(storageKey);
+    const file = this.supabase.storage.bucket(bucketName).file(storageKey);
     const [metadata] = await file.getMetadata();
     if (metadata.metadata?.ownerId !== ownerId) {
       throw new ForbiddenException('This uploaded file does not belong to you.');

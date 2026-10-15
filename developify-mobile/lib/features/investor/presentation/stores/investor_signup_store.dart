@@ -45,7 +45,8 @@ abstract class InvestorSignupStoreBase with Store, Lifecycle {
   final SessionService _session;
   final TransactionAuthorization _authorization;
   final bool isMock;
-  bool get usesFirebaseEmailLink => _repository.usesFirebaseEmailLink;
+  bool get usesEmailVerificationLink =>
+      _repository.usesEmailVerificationLink;
   final Cancellation _cancellation = Cancellation();
   Timer? _resendTimer;
   Timer? _faceTimer;
@@ -302,7 +303,7 @@ abstract class InvestorSignupStoreBase with Store, Lifecycle {
         stage != InvestorSignupStage.verification) {
       return false;
     }
-    if (!_repository.usesFirebaseEmailLink &&
+    if (!_repository.usesEmailVerificationLink &&
         !RegExp(r'^\d{6}$').hasMatch(code)) {
       error = 'Enter the six-digit verification code.';
       return false;

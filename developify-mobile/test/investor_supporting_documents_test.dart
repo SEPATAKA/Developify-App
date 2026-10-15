@@ -109,14 +109,20 @@ void main() {
         expect(replaced.first, same(files.first));
         expect(replaced.last.name, 'Signed_sale_agreement.pdf');
         expect(
-          store.deleteDocument('fundsEvidence', documentId: files.first.id),
+          await store.deleteDocument(
+            'fundsEvidence',
+            documentId: files.first.id,
+          ),
           isTrue,
         );
         expect(store.draft!.documents['fundsEvidence'], same(replaced.last));
         expect(store.draft!.additionalDocuments, isEmpty);
         expect(store.canContinue, isTrue);
         expect(
-          store.deleteDocument('fundsEvidence', documentId: replaced.last.id),
+          await store.deleteDocument(
+            'fundsEvidence',
+            documentId: replaced.last.id,
+          ),
           isTrue,
         );
         expect(store.draft!.documentsFor('fundsEvidence'), isEmpty);
@@ -176,7 +182,7 @@ void main() {
         );
         store.cancelUpload('fundsEvidence');
         expect(
-          store.deleteDocument('fundsEvidence', documentId: 'missing'),
+          await store.deleteDocument('fundsEvidence', documentId: 'missing'),
           isFalse,
         );
         expect(

@@ -245,7 +245,7 @@ void main() {
       await tester.tap(find.text('Add a co - owner'));
       await tester.pumpAndSettle();
       expect(screen().store.draft.coOwners, true);
-      screen().store.removeDocument('co-owner');
+      await screen().store.removeDocument('co-owner');
       await tester.pumpAndSettle();
       expect(screen().store.draft.coOwners, false);
       await tester.tap(find.widgetWithText(AppButton, 'Continue'));

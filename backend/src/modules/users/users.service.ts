@@ -5,8 +5,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import type { Query } from 'firebase-admin/firestore';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import {
+  DocumentQuery,
+  SupabaseDataService,
+} from '../../supabase/supabase-data.service';
 
 export type ResolvedInvestorEntity = {
   id: string;
@@ -18,28 +20,29 @@ export type ResolvedInvestorEntity = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly firebase: FirebaseAdminService) {}
+  constructor(private readonly supabase: SupabaseDataService) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   async getProfile(userId: string) {
-    const profile = await this.firebase.findUserSessionProfileById(userId);
+    const profile = await this.supabase.findUserSessionProfileById(userId);
     if (!profile) throw new NotFoundException('User profile not found.');
-    const userDocument = await this.firestore
+    const userDocument = await this.documents
       .collection('users')
       .doc(userId)
       .get();
     const photoKey = userDocument.get('profilePhotoKey');
     let profilePhotoUrl: string | null = null;
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    const bucketName =
+      process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
     if (
       typeof photoKey === 'string' &&
       photoKey.startsWith(`profile/avatar/${userId}/`) &&
       bucketName
     ) {
-      [profilePhotoUrl] = await this.firebase.storage
+      [profilePhotoUrl] = await this.supabase.storage
         .bucket(bucketName)
         .file(photoKey)
         .getSignedUrl({
@@ -90,7 +93,7 @@ export class UsersService {
       data.email.toLowerCase().trim() !== existing.email.toLowerCase().trim()
     ) {
       throw new BadRequestException(
-        'Update your email through Firebase Authentication.',
+        'Update your email through Supabase Authentication.',
       );
     }
     const updates: Record<string, string | boolean | null> = {};
@@ -124,7 +127,7 @@ export class UsersService {
       }
       updates[key] = value;
     }
-    await this.firestore
+    await this.documents
       .collection('users')
       .doc(userId)
       .set({ ...updates, updatedAt: new Date() }, { merge: true });
@@ -132,7 +135,7 @@ export class UsersService {
   }
 
   async getPreferences(userId: string) {
-    const ref = this.firestore.collection('userPreferences').doc(userId);
+    const ref = this.documents.collection('userPreferences').doc(userId);
     const snapshot = await ref.get();
     if (!snapshot.exists) {
       const defaults = {
@@ -165,7 +168,7 @@ export class UsersService {
       topics: data.topics ?? existing.topics,
       language: data.language ?? existing.language,
     };
-    await this.firestore
+    await this.documents
       .collection('userPreferences')
       .doc(userId)
       .set({ userId, ...updated, updatedAt: new Date() }, { merge: true });
@@ -173,7 +176,7 @@ export class UsersService {
   }
 
   async getPayout(userId: string) {
-    const payout = await this.firestore
+    const payout = await this.documents
       .collection('payoutAccounts')
       .doc(userId)
       .get();
@@ -200,7 +203,7 @@ export class UsersService {
         `profile/payout/${userId}/`,
       );
     }
-    const ref = this.firestore.collection('payoutAccounts').doc(userId);
+    const ref = this.documents.collection('payoutAccounts').doc(userId);
     const existing = await ref.get();
     await ref.set(
       {
@@ -224,13 +227,9 @@ export class UsersService {
     if (!storageKey.startsWith(requiredPrefix)) {
       throw new BadRequestException('The uploaded file reference is invalid.');
     }
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured for file verification.',
-      );
-    }
-    const file = this.firebase.storage.bucket(bucketName).file(storageKey);
+    const bucketName =
+      process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
+    const file = this.supabase.storage.bucket(bucketName).file(storageKey);
     const [metadata] = await file.getMetadata();
     if (metadata.metadata?.ownerId !== userId) {
       throw new BadRequestException('The uploaded file could not be verified.');
@@ -238,7 +237,7 @@ export class UsersService {
   }
 
   async getSecurity(userId: string) {
-    const ref = this.firestore.collection('securityPreferences').doc(userId);
+    const ref = this.documents.collection('securityPreferences').doc(userId);
     const snapshot = await ref.get();
     if (!snapshot.exists) {
       const defaults = {
@@ -287,7 +286,7 @@ export class UsersService {
         previousDevices,
         updatedAt: new Date(),
       };
-      await this.firestore
+      await this.documents
         .collection('securityPreferences')
         .doc(userId)
         .set({ userId, ...saved }, { merge: true });
@@ -302,7 +301,7 @@ export class UsersService {
         throw new BadRequestException('PIN must contain 4 to 12 digits.');
       }
       const pinHash = await argon2.hash(pin);
-      await this.firestore
+      await this.documents
         .collection('users')
         .doc(userId)
         .set({ pinHash, updatedAt: new Date() }, { merge: true });
@@ -313,7 +312,7 @@ export class UsersService {
         throw new BadRequestException('Current and new password required.');
       }
       throw new BadRequestException(
-        'Change the password through Firebase Authentication so the current password can be reauthenticated securely.',
+        'Change the password through Supabase Authentication so the current password can be reauthenticated securely.',
       );
     }
     if (action === 'saveBiometrics' || action === 'saveTwoFactor') {
@@ -323,7 +322,7 @@ export class UsersService {
   }
 
   async verifyPin(userId: string, pin: string) {
-    const user = await this.firestore.collection('users').doc(userId).get();
+    const user = await this.documents.collection('users').doc(userId).get();
     if (!user.exists) throw new NotFoundException('User profile not found.');
     const pinHash = user.get('pinHash');
     if (typeof pinHash !== 'string' || !pinHash) {
@@ -339,7 +338,7 @@ export class UsersService {
     userId: string,
     entityType?: string,
   ): Promise<ResolvedInvestorEntity> {
-    let query: Query = this.firestore
+    let query: DocumentQuery = this.documents
       .collection('investorEntities')
       .where('userId', '==', userId);
     const entities = await query.get();

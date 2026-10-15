@@ -60,6 +60,8 @@ abstract class TransferStoreBase with Store, Lifecycle {
   @observable
   InvestorOperationReceipt? receipt;
   bool get supportsManualEft => _repository.supportsManualEft;
+  bool get bankTransferAvailable => _repository.supportedPaymentMethods
+      .contains(PaymentMethodKind.bankAccount);
   bool get cardPaymentsEnabled =>
       _repository.supportedPaymentMethods.contains(PaymentMethodKind.card);
   bool get allowDemoBiometricAuthorization =>
@@ -103,6 +105,8 @@ abstract class TransferStoreBase with Store, Lifecycle {
   @computed
   MonetaryAmount get fee => kind == InvestorTransferKind.withdrawal
       ? InvestorTransferFees.withdrawal
+      : cardPaymentsEnabled && method?.kind == PaymentMethodKind.card
+      ? const MonetaryAmount(0, Currency.zar)
       : method?.kind == PaymentMethodKind.card
       ? InvestorTransferFees.cardTopUp(
           amount ?? const MonetaryAmount(0, Currency.zar),
@@ -146,6 +150,12 @@ abstract class TransferStoreBase with Store, Lifecycle {
       switch (result) {
         case Success(:final value):
           account = value;
+          if (kind == InvestorTransferKind.topUp &&
+              cardPaymentsEnabled &&
+              (methodId == null ||
+                  methodId == InvestorDepositAccount.paystackMethod.id)) {
+            paymentKind = PaymentMethodKind.card;
+          }
           methodId =
               method?.id ??
               (kind == InvestorTransferKind.withdrawal

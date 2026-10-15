@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
-import { EntityType } from '../../firebase/domain.enums';
+import { EntityType } from '../../supabase/domain.enums';
 import { KycService } from './kyc.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
 

@@ -8,6 +8,7 @@ import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
 import 'package:developify_mobile/core/services/mock_behavior.dart';
 import 'package:developify_mobile/core/utils/cancellation.dart';
+import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account_context.dart';
 import 'package:developify_mobile/features/investor/domain/investor_project.dart';
@@ -116,6 +117,10 @@ final class MockInvestorAccountRepository implements InvestorAccountRepository {
       _pending.remove(cancellation);
     }
   }
+
+  @override
+  Future<Result<InvestorAccountSummary>> balance() =>
+      _run((account) => Success(InvestorAccountSummary.from(account.snapshot)));
 
   @override
   Future<Result<InvestorAccountSnapshot>> snapshot() =>

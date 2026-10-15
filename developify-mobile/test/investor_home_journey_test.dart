@@ -115,7 +115,7 @@ void main() {
       tester
           .widget<InvestorHomeScreen>(find.byType(InvestorHomeScreen))
           .store
-          .data,
+          .summary,
       isNull,
     );
     await reveal(tester, find.text('No projects yet'));
@@ -126,6 +126,32 @@ void main() {
     await tester.tap(find.text('Explore'));
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/investor/explore');
+  });
+
+  testWidgets('Wallet balance remains visible when featured projects fail', (
+    tester,
+  ) async {
+    final (dependencies, _) = await mount(tester);
+    final store = tester
+        .widget<InvestorHomeScreen>(find.byType(InvestorHomeScreen))
+        .store;
+    final catalog =
+        dependencies.container<InvestorCatalogRepository>()
+            as MockInvestorCatalogRepository;
+    catalog.behavior.failNext();
+
+    final loading = store.load();
+    await tester.pumpAndSettle();
+    await loading;
+
+    final header = tester.widget<InvestorBalanceHeader>(
+      find.byType(InvestorBalanceHeader),
+    );
+    expect(store.balanceStatus, LoadStatus.success);
+    expect(header.amountPlaceholder, isNull);
+    expect(header.amount.minorUnits, greaterThan(0));
+    expect(find.text('Balance unavailable'), findsNothing);
+    expect(find.text('Try again'), findsAtLeastNWidgets(1));
   });
 
   testWidgets(
@@ -288,7 +314,7 @@ void main() {
       final store = tester
           .widget<InvestorHomeScreen>(find.byType(InvestorHomeScreen))
           .store;
-      final account = store.data;
+      final account = store.summary;
       final catalog =
           dependencies.container<InvestorCatalogRepository>()
               as MockInvestorCatalogRepository;
@@ -296,13 +322,13 @@ void main() {
       unawaited(store.toggleFavourite('marula-heights'));
       await tester.pumpAndSettle();
       expect(find.text('Unable to connect. Please try again.'), findsOneWidget);
-      expect(store.data, same(account));
+      expect(store.summary, same(account));
       expect(store.favourites, isEmpty);
       final retry = find.widgetWithText(TextButton, 'Try again');
       await tester.tap(retry);
       await tester.pumpAndSettle();
       expect(store.error, isNull);
-      expect(store.data!.investments.length, account!.investments.length);
+      expect(store.summary, same(account));
       expect(find.bySemanticsLabel('Hide balance'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { DocumentData } from 'firebase-admin/firestore';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import { DocumentData, SupabaseDataService } from '../../supabase/supabase-data.service';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class CatalogService {
   constructor(
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
     private readonly users: UsersService,
   ) {}
 
@@ -56,7 +55,7 @@ export class CatalogService {
   }
 
   async listProjects() {
-    const projects = await this.firebase.firestore
+    const projects = await this.supabase.documents
       .collection('projects')
       .where('status', 'in', ['open', 'funded'])
       .limit(100)
@@ -79,7 +78,7 @@ export class CatalogService {
   }
 
   async getProject(id: string) {
-    const project = await this.firebase.firestore
+    const project = await this.supabase.documents
       .collection('projects')
       .doc(id)
       .get();
@@ -89,7 +88,7 @@ export class CatalogService {
 
   async favourites(userId: string, entityType?: string) {
     const entity = await this.users.resolveEntity(userId, entityType);
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('favourites')
       .where('entityId', '==', entity.id)
       .get();
@@ -104,7 +103,7 @@ export class CatalogService {
   ) {
     const entity = await this.users.resolveEntity(userId, entityType);
     await this.getProject(projectId);
-    const reference = this.firebase.firestore
+    const reference = this.supabase.documents
       .collection('favourites')
       .doc(`${entity.id}__${projectId}`);
     if (favourite) {
@@ -126,7 +125,7 @@ export class CatalogService {
   async rememberSearch(userId: string, query: string) {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return { ok: true };
-    await this.firebase.firestore
+    await this.supabase.documents
       .collection('users')
       .doc(userId)
       .collection('searchHistory')
@@ -139,7 +138,7 @@ export class CatalogService {
   }
 
   async recentSearches(userId: string) {
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('users')
       .doc(userId)
       .collection('searchHistory')

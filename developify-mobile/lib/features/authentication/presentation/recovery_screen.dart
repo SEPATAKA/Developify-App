@@ -66,7 +66,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     if (mounted &&
         widget.routePrefix == 'investor-' &&
         stage == 0 &&
-        widget.store.stage == 1) {
+        widget.store.stage == 1 &&
+        !widget.store.usesSupabaseRecovery) {
       final notice = showSimulationNotice(
         context,
         'Demo recovery: use 123456. No email is sent.',
@@ -175,14 +176,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         Observer(
           builder: (_) => ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: widget.routePrefix == 'investor-'
-                  ? (store.stage == 0 ? 76 : 38).w
-                  : 0,
+              minHeight: store.stage == 0 ? 76.w : 38.w,
             ),
             child: Text(
               store.stage == 0
-                  ? 'Enter the email address linked to your account to receive a secure verification code or recovery instructions and regain access to your account quickly and safely.'
-                  : 'Enter verification code sent  to  ${store.maskedEmail} regain access to your account quickly and safely.',
+                  ? 'Enter the email address linked to your account to receive a secure Supabase recovery code or link and regain access to your account.'
+                  : store.stage == 1
+                  ? 'Enter the Supabase recovery code sent to ${store.maskedEmail}.'
+                  : 'Choose a new password for ${store.maskedEmail}.',
               style: AppTextStyles.text(
                 16,
                 color: store.stage < 2

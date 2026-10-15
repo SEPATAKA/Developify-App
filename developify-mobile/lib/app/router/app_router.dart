@@ -5,12 +5,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:developify_mobile/app/di/app_dependencies.dart';
-import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/route_names.dart';
 import 'package:developify_mobile/app/router/app_transition_page.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
 import 'package:developify_mobile/core/widgets/states.dart';
 import 'package:developify_mobile/features/authentication/presentation/auth_screen.dart';
+import 'package:developify_mobile/features/authentication/presentation/auth_callback_screen.dart';
 import 'package:developify_mobile/features/authentication/presentation/signup_screen.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/signup_store.dart';
 import 'package:developify_mobile/features/authentication/presentation/recovery_screen.dart';
@@ -65,6 +65,7 @@ GoRouter createAppRouter(
     '/create-account',
     '/welcome-back',
     '/forgot-password',
+    '/auth-callback',
     '/onboarding-terms',
     '/investor/onboarding',
     '/investor/splash',
@@ -141,7 +142,13 @@ GoRouter createAppRouter(
           path == '/investor/terms' ||
           path == '/investor/privacy' ||
           path == '/investor/onboarding-terms';
-      if (session.isAuthenticated && publicPaths.contains(path) && !legal) {
+      final passwordReset =
+          path == '/forgot-password' &&
+          state.uri.queryParameters['reset'] == 'true';
+      if (session.isAuthenticated &&
+          publicPaths.contains(path) &&
+          !legal &&
+          !passwordReset) {
         final destination =
             pendingLocation ??
             (path == '/investor/create-account'
@@ -231,10 +238,25 @@ GoRouter createAppRouter(
         '/welcome-back',
         (_, _, store) => AuthScreen(store: store, returning: true),
       ),
-      route<RecoveryStore>(
-        Routes.recovery,
-        '/forgot-password',
-        (_, _, store) => RecoveryScreen(store: store),
+      route<RecoveryStore>(Routes.recovery, '/forgot-password', (
+        _,
+        state,
+        store,
+      ) {
+        if (state.uri.queryParameters['reset'] == 'true') {
+          store.startPasswordReset();
+        }
+        return RecoveryScreen(store: store);
+      }),
+      GoRoute(
+        name: 'auth-callback',
+        path: '/auth-callback',
+        pageBuilder: (context, state) => page(
+          context,
+          'auth-callback',
+          state.pageKey,
+          const AuthCallbackScreen(),
+        ),
       ),
       StatefulShellRoute.indexedStack(
         key: experienceShellKey,
@@ -290,8 +312,6 @@ GoRouter createAppRouter(
                           onLogout: logout,
                           landowner: get<LandownerRepository>(),
                           session: session,
-                          firebaseIdentity:
-                              get<AppEnvironment>().firebaseEnabled,
                         ),
                       ),
                     ],

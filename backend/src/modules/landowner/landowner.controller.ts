@@ -7,7 +7,7 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { PropertyStatus } from '../../firebase/domain.enums';
+import { PropertyStatus } from '../../supabase/domain.enums';
 import { LandownerService } from './landowner.service';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
 

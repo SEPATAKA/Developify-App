@@ -1,6 +1,7 @@
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
+import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_project.dart';
 import 'package:developify_mobile/features/investor/domain/investment_policy.dart';
@@ -27,6 +28,7 @@ abstract interface class InvestorAccountRepository {
   bool get allowsDemoBiometricAuthorization;
   bool get balanceVisible;
   void setBalanceVisible(bool visible);
+  Future<Result<InvestorAccountSummary>> balance();
   Future<Result<InvestorAccountSnapshot>> snapshot();
   Future<Result<InvestorTransaction>> transaction(String id);
   Future<Result<InvestorInvestment>> investment(String id);

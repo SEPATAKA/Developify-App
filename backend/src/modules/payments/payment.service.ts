@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PaystackPaymentProvider } from './paystack-payment.provider';
+
+export const PAYSTACK_CARD_METHOD_ID = 'paystack-card-checkout';
 
 /** Phase-1 manual EFT payment provider. Swap for Paystack later. */
 export interface PaymentProvider {
@@ -7,9 +11,12 @@ export interface PaymentProvider {
     amountCents: bigint;
     reference: string;
     entityId: string;
+    transactionId: string;
+    email: string;
   }): Promise<{
     status: 'pending';
-    instructions: Record<string, string>;
+    instructions?: Record<string, string>;
+    checkoutUrl?: string;
   }>;
   initiateWithdrawal(input: {
     amountCents: bigint;
@@ -26,6 +33,8 @@ export class ManualPaymentProvider implements PaymentProvider {
     amountCents: bigint;
     reference: string;
     entityId: string;
+    transactionId: string;
+    email: string;
   }) {
     return {
       status: 'pending' as const,
@@ -51,9 +60,43 @@ export class ManualPaymentProvider implements PaymentProvider {
 
 @Injectable()
 export class PaymentService {
-  constructor(private provider: ManualPaymentProvider) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly manual: ManualPaymentProvider,
+    private readonly paystack: PaystackPaymentProvider,
+  ) {}
 
   get active(): PaymentProvider {
-    return this.provider;
+    switch (this.config.get<string>('PAYMENT_PROVIDER', 'manual')) {
+      case 'manual':
+        return this.manual;
+      case 'paystack':
+        return {
+          name: 'paystack',
+          initiateDeposit: (input) => this.paystack.initiateDeposit(input),
+          initiateWithdrawal: (input) => this.manual.initiateWithdrawal(input),
+        };
+      default:
+        throw new ServiceUnavailableException(
+          'PAYMENT_PROVIDER must be set to manual or paystack.',
+        );
+    }
+  }
+
+  get cardPaymentsEnabled(): boolean {
+    return this.active.name === 'paystack';
+  }
+
+  get manualProvider(): ManualPaymentProvider {
+    return this.manual;
+  }
+
+  get paystackTestProvider(): PaystackPaymentProvider {
+    if (!this.cardPaymentsEnabled) {
+      throw new ServiceUnavailableException(
+        'Paystack card payments are not enabled.',
+      );
+    }
+    return this.paystack;
   }
 }

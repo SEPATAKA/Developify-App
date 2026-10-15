@@ -30,7 +30,7 @@ import 'package:developify_mobile/features/landowner/domain/landowner_repository
 import 'package:developify_mobile/features/profile/presentation/stores/profile_store.dart';
 import 'package:developify_mobile/features/shared/domain/app_user.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
-import 'package:developify_mobile/features/authentication/presentation/widgets/firebase_identity_card.dart';
+import 'package:developify_mobile/features/authentication/presentation/widgets/account_identity_card.dart';
 
 enum ProfilePage { overview, edit, payout, preferences, language }
 
@@ -43,7 +43,6 @@ class ProfileScreen extends StatefulWidget {
     this.routePrefix = '',
     this.landowner,
     this.session,
-    this.firebaseIdentity = false,
   });
   final ProfileStore store;
   final ProfilePage page;
@@ -51,7 +50,6 @@ class ProfileScreen extends StatefulWidget {
   final String routePrefix;
   final LandownerRepository? landowner;
   final SessionService? session;
-  final bool firebaseIdentity;
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
@@ -138,12 +136,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         extensions: const ['jpg', 'jpeg', 'png', 'webp'],
       );
       if (!mounted || files == null || files.isEmpty) return;
-      if (!await store.selectPhoto(files.first) && mounted) {
+      final uploaded = await store.selectPhoto(files.first);
+      if (!mounted) return;
+      if (!uploaded) {
         showFeedback(
           context,
           store.error ?? 'The profile photo could not be uploaded.',
         );
+        return;
       }
+      showFeedback(context, 'Photo uploaded and saved to your profile.');
     } on PlatformException catch (exception) {
       if (mounted) {
         showFeedback(
@@ -272,9 +274,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: 13.w),
               sliver: SliverToBoxAdapter(
-                child: FirebaseIdentityCard(
+                child: AccountIdentityCard(
                   user: user,
-                  firebaseIdentity: widget.firebaseIdentity,
                 ),
               ),
             ),
@@ -494,6 +495,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textInputAction: TextInputAction.newline,
           ),
           SizedBox(height: (user.hasProfilePhoto ? 38 : 33).w),
+        ],
+        if (!_investor) ...[
           InlineError(store.error),
           Padding(
             padding: EdgeInsets.only(left: 1.w),

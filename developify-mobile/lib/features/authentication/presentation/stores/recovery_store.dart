@@ -12,6 +12,7 @@ class RecoveryStore = RecoveryStoreBase with _$RecoveryStore;
 abstract class RecoveryStoreBase with Store, Lifecycle {
   RecoveryStoreBase(this._repository);
   final AuthRepository _repository;
+  bool get usesSupabaseRecovery => _repository.usesEmailVerificationLink;
   Timer? _timer;
   @observable
   String email = '';
@@ -75,6 +76,16 @@ abstract class RecoveryStoreBase with Store, Lifecycle {
     if (isDisposed || status == LoadStatus.loading) return;
     email = value;
     error = null;
+  }
+
+  @action
+  void startPasswordReset() {
+    if (isDisposed || status == LoadStatus.loading) return;
+    email = _repository.recoveryEmail ?? email;
+    stage = 2;
+    error = null;
+    code = '';
+    submitted = false;
   }
 
   @action

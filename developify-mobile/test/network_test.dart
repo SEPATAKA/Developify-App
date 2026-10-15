@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:developify_mobile/app/di/app_dependencies.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/core/errors/result.dart';
@@ -58,10 +59,12 @@ void main() {
   test(
     'A configured API URL selects live auth unless mock mode is explicit',
     () async {
+      SharedPreferences.setMockInitialValues({});
       final live = await AppDependencies.create(
         environment: const AppEnvironment(
           apiBaseUrl: 'https://api.example.test',
           mockMode: false,
+          supabaseAnonKey: 'sb_publishable_test-key',
         ),
         tokenStorage: MemoryTokenStorage(),
       );

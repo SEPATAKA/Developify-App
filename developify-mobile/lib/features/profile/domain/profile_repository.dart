@@ -50,6 +50,7 @@ abstract interface class ProfileRepository {
   Future<Result<void>> saveSecurityPreferences(SecurityPreferences value);
   Future<Result<AppUser>> load();
   Future<Result<AppUser>> update(AppUser user);
+  Future<Result<AppUser>> updateProfilePhoto(String storageKey);
   PayoutAccount? get payoutAccount;
   ProfilePreferences get preferences;
   Future<Result<void>> updatePreferences(ProfilePreferences preferences);

@@ -271,4 +271,38 @@ void main() {
       await deps.dispose();
     },
   );
+
+  testWidgets('Investor can save profile changes', (tester) async {
+    viewport(tester, 997);
+    final deps = await AppDependencies.create(
+      environment: const AppEnvironment(mockDelay: Duration.zero),
+    );
+    deps.session.signIn(user);
+    final router = createAppRouter(
+      deps,
+      initialLocation: '/investor/profile/edit',
+    );
+    await tester.pumpWidget(DevelopifyApp(dependencies: deps, router: router));
+    await tester.pumpAndSettle();
+
+    final saveButton = find.byKey(const ValueKey('profile-save'));
+    expect(saveButton, findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('field-Full Name')),
+      'Updated Investor',
+    );
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    expect(deps.session.user?.name, 'Updated Investor');
+    expect(
+      find.byKey(const ValueKey('profile-menu-Edit Profile')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox());
+    router.dispose();
+    await deps.dispose();
+  });
 }

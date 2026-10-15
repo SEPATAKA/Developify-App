@@ -71,23 +71,43 @@ abstract class ProfileStoreBase with Store, Lifecycle {
     if (isDisposed || saving) return false;
     saving = true;
     error = null;
-    final result = await _repository.uploadFile(file, prefix: 'profile/avatar');
+    final upload = await _repository.uploadFile(file, prefix: 'profile/avatar');
     if (isDisposed) return false;
+    if (upload case Failure(:final error)) {
+      return runInAction(() {
+        saving = false;
+        this.error = error.message;
+        return false;
+      });
+    }
+
+    final storageKey = (upload as Success<String>).value;
+    final saved = await _repository.updateProfilePhoto(storageKey);
+    if (isDisposed) return false;
+    if (saved case Failure(:final error)) {
+      final cleanup = await _repository.deleteFile(storageKey);
+      final message = switch (cleanup) {
+        Success() => error.message,
+        Failure(error: final cleanupError) =>
+          '${error.message} The uploaded file could not be removed: ${cleanupError.message}',
+      };
+      return runInAction(() {
+        saving = false;
+        this.error = message;
+        return false;
+      });
+    }
+
+    final savedUser = (saved as Success<AppUser>).value;
     return runInAction(() {
       saving = false;
-      switch (result) {
-        case Success(:final value):
-          user = user?.copyWith(
-            hasProfilePhoto: true,
-            profilePhotoKey: value,
-            profilePhotoPreview: file.bytes,
-          );
-          dirty = true;
-          return true;
-        case Failure(:final error):
-          this.error = error.message;
-          return false;
-      }
+      user = user?.copyWith(
+        hasProfilePhoto: true,
+        profilePhotoKey: storageKey,
+        profilePhotoUrl: savedUser.profilePhotoUrl,
+        profilePhotoPreview: file.bytes,
+      );
+      return true;
     });
   }
 
@@ -118,6 +138,7 @@ abstract class ProfileStoreBase with Store, Lifecycle {
         this.error = error.message;
         return false;
       }
+      user = (result as Success<AppUser>).value;
       dirty = false;
       return true;
     });

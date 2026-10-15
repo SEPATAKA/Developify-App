@@ -10,11 +10,16 @@ import 'package:developify_mobile/core/network/api_client.dart';
 import 'package:developify_mobile/core/storage/token_storage.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
 import 'package:developify_mobile/features/investor/data/api_investor_account_repository.dart';
+import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account_context.dart';
 
 class PaymentAdapter implements HttpClientAdapter {
   final requests = <RequestOptions>[];
+  int balanceStatusCode = 200;
+  int snapshotBalanceCents = 0;
+  List<Object> snapshotInvestments = const [];
+  String transactionStatus = 'pending';
 
   @override
   Future<ResponseBody> fetch(
@@ -23,7 +28,27 @@ class PaymentAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
-    final response = options.uri.path.endsWith('/wallet/add-money')
+    final isCardCheckout =
+        options.uri.path.endsWith('/wallet/add-money') &&
+        options.data is Map &&
+        (options.data as Map)['methodId'] == 'paystack-card-checkout';
+    if (options.uri.path.endsWith('/wallet/balance') &&
+        balanceStatusCode != 200) {
+      return ResponseBody.fromString(
+        '{"message":"Wallet balance route not found"}',
+        balanceStatusCode,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+    final response = isCardCheckout
+        ? {
+            'id': 'deposit-card-1',
+            'status': 'pending',
+            'checkoutUrl': 'https://checkout.paystack.com/session',
+          }
+        : options.uri.path.endsWith('/wallet/add-money')
         ? {
             'id': 'deposit-1',
             'status': 'pending',
@@ -36,10 +61,27 @@ class PaymentAdapter implements HttpClientAdapter {
               'note': 'Transfer using the reference.',
             },
           }
-        : {
-            'availableCents': 0,
+        : options.uri.path.endsWith('/wallet/withdraw')
+        ? {'id': 'withdrawal-1', 'status': 'pending'}
+        : options.uri.path.contains('/wallet/transactions/')
+        ? {
+            'id': 'deposit-card-1',
+            'kind': 'topUp',
+            'status': transactionStatus,
+            'amountCents': 25000,
+            'createdAt': '2026-10-15T00:00:00.000Z',
+          }
+        : options.uri.path.endsWith('/wallet/balance')
+        ? {
+            'availableCents': 50000,
+            'heldPrincipalCents': 300000,
             'verificationStatus': 'verified',
-            'investments': <Object>[],
+          }
+        : {
+            'availableCents': snapshotBalanceCents,
+            'verificationStatus': 'verified',
+            'cardPaymentsEnabled': true,
+            'investments': snapshotInvestments,
             'transactions': <Object>[],
             'notifications': <Object>[],
             'paymentMethods': <Object>[],
@@ -96,9 +138,76 @@ void main() {
     expect(changes, isEmpty);
   });
 
+  test('Balance uses the lightweight live wallet endpoint', () async {
+    final result = await repository.balance();
+
+    expect(result, isA<Success<InvestorAccountSummary>>());
+    final summary = (result as Success<InvestorAccountSummary>).value;
+    expect(summary.available, const MonetaryAmount(50000, Currency.zar));
+    expect(summary.investedCapital, const MonetaryAmount(300000, Currency.zar));
+    expect(summary.overallBalance, const MonetaryAmount(350000, Currency.zar));
+    expect(adapter.requests.map((request) => request.uri.path), [
+      '/v1/wallet/balance',
+    ]);
+  });
+
+  test(
+    'Balance falls back to the snapshot when the endpoint is missing',
+    () async {
+      adapter.balanceStatusCode = 404;
+      adapter.snapshotBalanceCents = 50000;
+      adapter.snapshotInvestments = [
+        {
+          'id': 'investment-1',
+          'projectId': 'project-1',
+          'projectName': 'Savannah Estate',
+          'amountCents': 300000,
+          'rateBps': 1280,
+          'termMonths': 36,
+          'status': 'active',
+          'principalHeld': true,
+          'createdAt': '2026-01-01T00:00:00.000Z',
+        },
+      ];
+
+      final result = await repository.balance();
+
+      expect(result, isA<Success<InvestorAccountSummary>>());
+      final summary = (result as Success<InvestorAccountSummary>).value;
+      expect(summary.available, const MonetaryAmount(50000, Currency.zar));
+      expect(
+        summary.investedCapital,
+        const MonetaryAmount(300000, Currency.zar),
+      );
+      expect(
+        summary.overallBalance,
+        const MonetaryAmount(350000, Currency.zar),
+      );
+      expect(adapter.requests.map((request) => request.uri.path), [
+        '/v1/wallet/balance',
+        '/v1/wallet/snapshot',
+      ]);
+    },
+  );
+
+  test(
+    'Balance does not hide non-404 endpoint failures with a snapshot',
+    () async {
+      adapter.balanceStatusCode = 500;
+
+      final result = await repository.balance();
+
+      expect(result, isA<Failure<InvestorAccountSummary>>());
+      expect(adapter.requests.map((request) => request.uri.path), [
+        '/v1/wallet/balance',
+      ]);
+    },
+  );
+
   test(
     'Manual EFT response retains pending status and transfer instructions',
     () async {
+      final changes = repository.changes.first;
       final result = await repository.addMoney(
         amount: const MonetaryAmount(25000, Currency.zar),
         methodId: 'bank-method-1',
@@ -112,9 +221,111 @@ void main() {
       expect(receipt.status, InvestorTransactionStatus.pending);
       expect(receipt.paymentInstructions?.reference, 'INV-1234');
       expect(receipt.paymentInstructions?.amountCents, 25000);
+      expect((await changes).kinds, {InvestorDataKind.transactions});
+      expect(adapter.requests.map((request) => request.uri.path), [
+        '/v1/wallet/add-money',
+      ]);
+    },
+  );
+
+  test('Paystack checkout never sends card details to the API', () async {
+    final changes = repository.changes.first;
+    final result = await repository.addMoney(
+      amount: const MonetaryAmount(25000, Currency.zar),
+      methodId: 'paystack-card-checkout',
+      operationId: 'paystack-card-operation-1',
+      pin: '1234',
+    );
+
+    expect(result, isA<Success<InvestorOperationReceipt>>());
+    final receipt = (result as Success<InvestorOperationReceipt>).value;
+    expect(receipt.status, InvestorTransactionStatus.pending);
+    expect(receipt.checkoutUrl, 'https://checkout.paystack.com/session');
+    expect((await changes).kinds, {InvestorDataKind.transactions});
+    final request = adapter.requests.single;
+    expect(request.uri.path, '/v1/wallet/add-money');
+    expect(request.data, isA<Map>());
+    expect((request.data as Map).keys, isNot(contains('cardNumber')));
+    expect((request.data as Map).keys, isNot(contains('securityCode')));
+  });
+
+  test('Confirmed Paystack deposit refreshes the wallet balance', () async {
+    adapter.transactionStatus = 'successful';
+    final events = <InvestorAccountChange>[];
+    final subscription = repository.changes.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    final result = await repository.addMoney(
+      amount: const MonetaryAmount(25000, Currency.zar),
+      methodId: 'paystack-card-checkout',
+      operationId: 'paystack-confirmed-operation-1',
+      pin: '1234',
+    );
+
+    expect(result, isA<Success<InvestorOperationReceipt>>());
+    await expectLater(
+      repository.changes
+          .where((event) => event.kinds.contains(InvestorDataKind.wallet))
+          .first
+          .timeout(const Duration(seconds: 7)),
+      completion(
+        isA<InvestorAccountChange>().having(
+          (event) => event.kinds,
+          'kinds',
+          contains(InvestorDataKind.wallet),
+        ),
+      ),
+    );
+    expect(
+      adapter.requests.any(
+        (request) =>
+            request.uri.path == '/v1/wallet/transactions/deposit-card-1',
+      ),
+      isTrue,
+    );
+    expect(
+      events.any((event) => event.kinds.contains(InvestorDataKind.wallet)),
+      isTrue,
+    );
+  });
+
+  test(
+    'Withdrawal acceptance refreshes the available wallet balance',
+    () async {
+      final changes = repository.changes.first;
+      final result = await repository.withdraw(
+        amount: const MonetaryAmount(25000, Currency.zar),
+        methodId: 'bank-method-1',
+        operationId: 'withdraw-operation-1',
+        pin: '1234',
+      );
+
+      expect(result, isA<Success<InvestorOperationReceipt>>());
+      expect((await changes).kinds, {
+        InvestorDataKind.wallet,
+        InvestorDataKind.transactions,
+      });
+      expect(adapter.requests.map((request) => request.uri.path), [
+        '/v1/wallet/withdraw',
+      ]);
+    },
+  );
+
+  test(
+    'Snapshot exposes Paystack hosted checkout without a stored card',
+    () async {
+      final result = await repository.snapshot();
+
+      expect(result, isA<Success<InvestorAccountSnapshot>>());
+      expect(repository.supportedPaymentMethods, {
+        PaymentMethodKind.bankAccount,
+        PaymentMethodKind.card,
+      });
+      expect(repository.supportsManualEft, isTrue);
+      final snapshot = (result as Success<InvestorAccountSnapshot>).value;
       expect(
-        adapter.requests.map((request) => request.uri.path),
-        containsAll(['/v1/wallet/add-money', '/v1/wallet/snapshot']),
+        snapshot.paymentMethods,
+        contains(InvestorDepositAccount.paystackMethod),
       );
     },
   );

@@ -24,13 +24,13 @@ class InvestorRepresentativeDto {
   identityNumber!: string;
 }
 
-export class FirebaseIdTokenDto {
+export class SupabaseAuthTokenDto {
   @IsString()
   @MinLength(20)
   idToken!: string;
 }
 
-export class LandownerRegisterDto extends FirebaseIdTokenDto {
+export class LandownerRegisterDto extends SupabaseAuthTokenDto {
   @IsString()
   @MinLength(1)
   name!: string;
@@ -51,7 +51,7 @@ export class LandownerRegisterDto extends FirebaseIdTokenDto {
   entity?: EntityType;
 }
 
-export class InvestorCompleteDto extends FirebaseIdTokenDto {
+export class InvestorCompleteDto extends SupabaseAuthTokenDto {
   @IsString()
   @MinLength(1)
   name!: string;
@@ -84,27 +84,4 @@ export class InvestorCompleteDto extends FirebaseIdTokenDto {
   @ValidateNested({ each: true })
   @Type(() => InvestorRepresentativeDto)
   representatives?: InvestorRepresentativeDto[];
-}
-
-export class RecoveryRequestDto {
-  @IsEmail()
-  email!: string;
-}
-
-export class RecoveryVerifyDto {
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  @MinLength(4)
-  code!: string;
-}
-
-export class ResetPasswordDto {
-  @IsString()
-  challengeId!: string;
-
-  @IsString()
-  @MinLength(8)
-  password!: string;
 }

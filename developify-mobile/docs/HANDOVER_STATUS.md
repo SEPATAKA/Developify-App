@@ -19,13 +19,13 @@ Runtime assets, SVG identifiers, image crops, TASA font licence, native launcher
 | Wallet, investment, deposits, withdrawals, earnings and receipts | Simulated data/operations; no production money movement |
 | KYC, invitations, signatures and document previews | Simulated; no live identity, signature or document service |
 | Repository interfaces, Dio/token storage | Existing integration skeleton; live repositories and token refresh still need implementation |
-| Firebase analytics/crash/performance/config | Existing optional adapters; configuration required; collection disabled |
+| Telemetry | No-op adapters are active; no Firebase runtime dependencies remain |
 | OneSignal | Existing optional adapter; App ID empty; platform/provider integration required |
 | Installation registry, analytics event dictionary, CI tester distribution | Recommended future implementation |
 | Android signing | Existing debug signing, including release-mode local QA; no production signing delivery |
 | iOS signing | Simulator verification only; production team/provisioning remains CTO-owned |
 
-Verification uses `MOCK_MODE=true`, `MOCK_SCENARIO=success`, `FIREBASE_ENABLED=false`, `TELEMETRY_ENABLED=false`, and explicit empty `ONESIGNAL_APP_ID`. No production API, push or collection is activated. Setting `MOCK_MODE=false` or adding an API URL is not sufficient to connect services: registered mock requests become unavailable.
+Verification uses `MOCK_MODE=true`, `MOCK_SCENARIO=success`, `TELEMETRY_ENABLED=false`, and explicit empty `ONESIGNAL_APP_ID`. No production API, push or collection is activated. Setting `MOCK_MODE=false` or adding an API URL is not sufficient to connect services: registered mock requests become unavailable.
 
 ## Verification record
 
@@ -44,7 +44,7 @@ The accepted baseline was freshly regenerated, format-checked and analyzed with 
 | iOS simulator | Build blocked under Xcode 27: universal framework architecture check failed (exit 255); selected-simulator attempt reported dependency deployment targets below iOS 15. No fresh iOS journey success claimed |
 | Source/package checks | Relative documentation links checked; private-path/credential/residue audit and `git diff --check` passed before export |
 
-The Android build reports a future Kotlin Gradle Plugin compatibility warning for Firebase plugins. The pinned toolchain builds successfully; no upgrade or native migration was performed. The Xcode limitation and reproduction command are in the setup guide. Source builds are temporary validation artifacts and are excluded from delivery.
+The Xcode limitation and reproduction command are in the setup guide. Source builds are temporary validation artifacts and are excluded from delivery.
 
 These checks verify the delivered mock application and source reproducibility within the recorded toolchain. They do not prove production API authorization, financial settlement, live KYC or store readiness. Historical delivery results are not used as fresh native verification.
 
@@ -54,7 +54,7 @@ These checks verify the delivered mock application and source reproducibility wi
 2. Connect authentication/profile and one read-only catalogue journey, retaining repository interfaces and independent stores.
 3. Reconcile wallet/account/portfolio reads before enabling financial writes; agree quotes, idempotency, fees, capacity and final server authorization.
 4. Supply durable draft/document/KYC contracts for all four entity types and Landowner submissions.
-5. Confirm Firebase/OneSignal projects, privacy/consent policy, installation registry, notification payloads and monitoring owners.
+5. Confirm OneSignal project, privacy/consent policy, installation registry, notification payloads and monitoring owners.
 6. Supply signing/store/CI access and prove staging failure paths before production release.
 
 The [API guide](API_INTEGRATION_GUIDE.md) lists exact interfaces, methods, tests and backend inputs. The [service guide](OBSERVABILITY_AND_NOTIFICATIONS.md) provides recommendations and current official links. These production inputs do not block delivery of the accepted runnable mock source.

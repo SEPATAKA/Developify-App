@@ -27,13 +27,12 @@ final class MockProfileRepository implements ProfileRepository {
   @override
   Stream<SecurityPreferences> get securityChanges => _securityChanges.stream;
   @override
-  Future<Result<void>> saveSecurityPreferences(
-    SecurityPreferences value,
-  ) => _run(() {
-    if (_securityChanges.isClosed) return;
-    _security = value;
-    _securityChanges.add(value);
-  });
+  Future<Result<void>> saveSecurityPreferences(SecurityPreferences value) =>
+      _run(() {
+        if (_securityChanges.isClosed) return;
+        _security = value;
+        _securityChanges.add(value);
+      });
 
   @override
   void dispose() {
@@ -99,6 +98,29 @@ final class MockProfileRepository implements ProfileRepository {
     return _run(() {
       _session.updateUser(user);
       return user;
+    });
+  }
+
+  @override
+  Future<Result<AppUser>> updateProfilePhoto(String storageKey) {
+    final currentUser = _session.user;
+    if (currentUser == null) {
+      return Future.value(
+        const Failure(
+          AppFailure(
+            FailureKind.unauthenticated,
+            'Sign in to save your profile photo.',
+          ),
+        ),
+      );
+    }
+    return _run(() {
+      final updated = currentUser.copyWith(
+        hasProfilePhoto: true,
+        profilePhotoKey: storageKey,
+      );
+      _session.updateUser(updated);
+      return updated;
     });
   }
 

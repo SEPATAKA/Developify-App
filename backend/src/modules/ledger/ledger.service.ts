@@ -3,17 +3,22 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import type { Transaction } from 'firebase-admin/firestore';
-import { LedgerAccountType } from '../../firebase/domain.enums';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import { LedgerAccountType } from '../../supabase/domain.enums';
+import {
+  DocumentData,
+  DocumentTransaction,
+  SupabaseDataService,
+} from '../../supabase/supabase-data.service';
 import { assertBalancedLedger } from './ledger.utils';
+
+type EnsuredLedgerAccount = { id: string; balanceCents: unknown };
 
 @Injectable()
 export class LedgerService {
-  constructor(private readonly firebase: FirebaseAdminService) {}
+  constructor(private readonly supabase: SupabaseDataService) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   async ensureWallet(entityId: string) {
@@ -37,33 +42,41 @@ export class LedgerService {
     id: string,
     type: LedgerAccountType,
     fields: { entityId?: string } = {},
-  ) {
-    const reference = this.firestore.collection('ledgerAccounts').doc(id);
-    const account = await this.firestore.runTransaction(async (transaction) => {
-      const existing = await transaction.get(reference);
-      if (existing.exists) return existing.data()!;
-      const created = {
-        type,
-        currency: 'ZAR',
-        balanceCents: 0,
-        ...fields,
-        createdAt: new Date(),
-      };
-      transaction.create(reference, created);
-      return created;
-    });
-    return { id, ...account };
+  ): Promise<EnsuredLedgerAccount> {
+    const reference = this.documents.collection('ledgerAccounts').doc(id);
+    const account = await this.documents.runTransaction<DocumentData>(
+      async (transaction) => {
+        const existing = await transaction.get(reference);
+        if (existing.exists) return existing.data()!;
+        const created = {
+          type,
+          currency: 'ZAR',
+          balanceCents: 0,
+          ...fields,
+          createdAt: new Date(),
+        };
+        transaction.create(reference, created);
+        return created;
+      },
+    );
+    return { id, balanceCents: account.balanceCents };
   }
 
   async balanceCents(accountId: string): Promise<bigint> {
-    const account = await this.firestore
+    const account = await this.documents
       .collection('ledgerAccounts')
       .doc(accountId)
       .get();
     if (!account.exists) {
       throw new InternalServerErrorException('Ledger account was not found.');
     }
-    const balance = account.get('balanceCents');
+    return this.accountBalanceCents({
+      balanceCents: account.get('balanceCents'),
+    });
+  }
+
+  accountBalanceCents(account: { balanceCents: unknown }): bigint {
+    const balance = account.balanceCents;
     if (typeof balance !== 'number' || !Number.isSafeInteger(balance)) {
       throw new InternalServerErrorException('Ledger balance is invalid.');
     }
@@ -72,11 +85,11 @@ export class LedgerService {
 
   async walletBalanceForEntity(entityId: string): Promise<bigint> {
     const account = await this.ensureWallet(entityId);
-    return this.balanceCents(account.id);
+    return this.accountBalanceCents(account);
   }
 
   async postEntries(
-    transaction: Transaction,
+    transaction: DocumentTransaction,
     entries: {
       accountId: string;
       amountCents: bigint;
@@ -87,7 +100,7 @@ export class LedgerService {
     assertBalancedLedger(entries);
     const accountRefs = [
       ...new Set(entries.map((entry) => entry.accountId)),
-    ].map((id) => this.firestore.collection('ledgerAccounts').doc(id));
+    ].map((id) => this.documents.collection('ledgerAccounts').doc(id));
     const accounts = await Promise.all(
       accountRefs.map((reference) => transaction.get(reference)),
     );
@@ -125,7 +138,7 @@ export class LedgerService {
         );
       }
       balances.set(entry.accountId, balanceAfter);
-      const ledgerEntry = this.firestore.collection('ledgerEntries').doc();
+      const ledgerEntry = this.documents.collection('ledgerEntries').doc();
       transaction.create(ledgerEntry, {
         accountId: entry.accountId,
         transactionId: entry.transactionId ?? null,

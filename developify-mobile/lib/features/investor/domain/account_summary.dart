@@ -3,24 +3,37 @@ import 'package:developify_mobile/features/investor/domain/investor_account.dart
 import 'package:developify_mobile/features/investor/domain/investment_policy.dart';
 
 final class InvestorAccountSummary {
-  // Count available wallet funds plus distinct principal still held.
+  const InvestorAccountSummary({
+    required this.available,
+    required this.investedCapital,
+    required this.verification,
+  });
+
+  // Count available wallet funds plus principal still held.
   // Projected proceeds are neither available funds nor additional capital.
-  InvestorAccountSummary.from(InvestorAccountSnapshot snapshot) {
-    available = snapshot.balance(InvestmentPolicy.currency);
+  InvestorAccountSummary.from(InvestorAccountSnapshot snapshot)
+    : available = snapshot.balance(InvestmentPolicy.currency),
+      verification = snapshot.verification,
+      investedCapital = MonetaryAmount(
+        _heldPrincipalCents(snapshot),
+        InvestmentPolicy.currency,
+      );
+
+  static int _heldPrincipalCents(InvestorAccountSnapshot snapshot) {
     final ids = <String>{};
-    investedCapital = MonetaryAmount(
-      snapshot.investments
-          .where(
-            (holding) =>
-                holding.amount.currency == InvestmentPolicy.currency &&
-                holding.holdsPrincipal &&
-                ids.add(holding.id),
-          )
-          .fold(0, (total, holding) => total + holding.amount.minorUnits),
-      InvestmentPolicy.currency,
-    );
+    return snapshot.investments
+        .where(
+          (holding) =>
+              holding.amount.currency == InvestmentPolicy.currency &&
+              holding.holdsPrincipal &&
+              ids.add(holding.id),
+        )
+        .fold(0, (total, holding) => total + holding.amount.minorUnits);
   }
-  late final MonetaryAmount available;
-  late final MonetaryAmount investedCapital;
+
+  final MonetaryAmount available;
+  final MonetaryAmount investedCapital;
+  final VerificationStatus verification;
+
   MonetaryAmount get overallBalance => available + investedCapital;
 }

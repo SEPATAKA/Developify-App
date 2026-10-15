@@ -36,7 +36,7 @@ flutter test --reporter expanded
 
 `--enforce-lockfile` is supported by the tested Flutter/Pub toolchain. It must fail if locked resolution cannot be honoured; do not delete or regenerate the lockfile to hide a mismatch. Pub and native dependency downloads require network access on a machine without caches. Run commands from the extracted root so asset and test paths resolve correctly.
 
-For iOS on macOS, run `flutter pub get --enforce-lockfile` before `(cd ios && pod install --deployment)`. The deployment flag enforces [Podfile.lock](../ios/Podfile.lock). Open `ios/Runner.xcworkspace`, not the `.xcodeproj`, for native development. Select a locally installed compatible simulator using `flutter devices` or Xcode. A physical iPhone additionally requires an approved signing team and provisioning.
+For iOS on macOS after changing Flutter plugins, run `flutter pub get`, then `(cd ios && pod install)` to refresh [Podfile.lock](../ios/Podfile.lock). The lockfile was pruned to the current non-Firebase Flutter plugin graph on Windows; validate it with CocoaPods on macOS before an iOS release. Once regenerated and reviewed, use `pod install --deployment` for reproducible builds. Open `ios/Runner.xcworkspace`, not the `.xcodeproj`, for native development. Select a locally installed compatible simulator using `flutter devices` or Xcode. A physical iPhone additionally requires an approved signing team and provisioning.
 
 ## Configuration
 
@@ -48,13 +48,14 @@ For iOS on macOS, run `flutter pub get --enforce-lockfile` before `(cd ios && po
 | `MOCK_SCENARIO` | String mapped to the cases below; unknown values fall back to success. | `success` |
 | `MOCK_DELAY_MS` | `int.fromEnvironment`, defaults 350 milliseconds; malformed values use the default. Use a nonnegative value; the parser itself does not clamp negatives. | `350` |
 | `API_BASE_URL` | String, defaults empty. A valid URL plus `MOCK_MODE=false` (the default) selects the live backend repositories. Live mode fails at startup when the URL is absent or invalid; mock repositories are never selected implicitly. `apiUri` accepts HTTPS, or HTTP for localhost, 127.0.0.1 and 10.0.2.2, with no user-info, query or fragment. | `https://api.example.com` (illustration only) |
-| `FIREBASE_ENABLED` | `bool.fromEnvironment`, defaults false. Enables Firebase initialization and makes live mobile sign-in and registration use Firebase Authentication. | `false` |
-| `TELEMETRY_ENABLED` | `bool.fromEnvironment`, defaults false. Gates analytics/crash/performance collection after Firebase initialization. | `false` |
-| `ONESIGNAL_APP_ID` | String, defaults empty. Empty/whitespace disables initialization; a nonempty value attempts initialization independently of mock/Firebase flags. | Explicit empty value |
+| `SUPABASE_URL` | String, defaults to the configured Developify Supabase project URL. Live mode uses this for Supabase Authentication. | Project URL |
+| `SUPABASE_ANON_KEY` | String, defaults to the configured publishable key. Client-safe Supabase key only; never use a service-role key in the app. | Project publishable key |
+| `TELEMETRY_ENABLED` | Reserved for a future configured telemetry provider; telemetry integrations are currently disabled. | `false` |
+| `ONESIGNAL_APP_ID` | String, defaults empty. Empty/whitespace disables initialization; a nonempty value attempts initialization independently of mock/live mode. | Explicit empty value |
 
 Supported scenario strings: `success`, `empty`, `network_failure`, `low_balance`, `incomplete_kyc`, `pending_verification`, `rejected_verification`, `no_projects`, `no_transactions`, `no_notifications`, `no_portfolio`, `withdrawal_unavailable`, `payment_method_unavailable`, `validation_failure`, `missing_item`. Applicability varies by repository. `network_failure` fails the first request on each affected repository behavior and then permits retry.
 
-For bool defines, use literal `true` or `false`. Keep the explicit empty OneSignal define in verification commands, and avoid personal IDE launch profiles or `--dart-define-from-file` inputs. Firebase client options are generated in `lib/firebase_options.dart` for the registered Android, iOS and web applications; Android also uses `android/app/google-services.json`. These client identifiers are not server credentials. Firebase Authentication, Firestore application repositories and the production API remain separate integrations; enabling telemetry does not connect them.
+For bool defines, use literal `true` or `false`. Keep the explicit empty OneSignal define in verification commands, and avoid personal IDE launch profiles or `--dart-define-from-file` inputs. The mobile app uses Supabase Auth and the authenticated backend; the Supabase service-role key belongs only in the backend's local secret configuration.
 
 ## Build and native tests
 
@@ -64,7 +65,6 @@ Normal mock launch:
 flutter run --target lib/main.dart \
   --dart-define=MOCK_MODE=true \
   --dart-define=MOCK_SCENARIO=success \
-  --dart-define=FIREBASE_ENABLED=false \
   --dart-define=TELEMETRY_ENABLED=false \
   --dart-define=ONESIGNAL_APP_ID=
 ```
@@ -72,28 +72,16 @@ flutter run --target lib/main.dart \
 Launch against the local backend (investor registration is inserted after OTP verification and completion of the security steps):
 
 ```sh
-flutter run -d web-server --web-hostname 127.0.0.1 --web-port 59495 --target lib/main.dart \
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 59497 --target lib/main.dart \
   --dart-define=API_BASE_URL=http://localhost:3000 \
   --dart-define=MOCK_MODE=false \
-  --dart-define=FIREBASE_ENABLED=true \
   --dart-define=TELEMETRY_ENABLED=false \
   --dart-define=ONESIGNAL_APP_ID=
 ```
 
-Firebase live sign-in and signup require Firebase Authentication (Email/Password) enabled in the project, valid Firebase Admin credentials configured for the backend, and the matching API URL. Both landowner and investor signup send Firebase's email-verification link. After opening the link, return to investor signup and confirm verification to finish creating the account. Passwords are sent directly to Firebase Authentication, not to the backend for Firebase-enabled registrations.
+Before using live mode, configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`, then start the backend from `backend/`. Never place the service-role key in Flutter defines or the mobile app. The local Supabase Auth redirect allow-list includes `http://127.0.0.1:59497/auth-callback/`, `http://localhost:59497/auth-callback/`, `http://localhost:3001/login`, and `developify://auth-callback/`. Android and iOS register the custom URL scheme in their native project files. Email/password sign-in, signup verification, password-reset codes/links, and password changes use Supabase Auth. Once a verified signup signs in, the backend creates its Developify profile and membership records in the Supabase database from the validated signup metadata.
 
-Launch the mock app with Firebase telemetry enabled:
-
-```sh
-flutter run -d chrome --target lib/main.dart \
-  --dart-define=MOCK_MODE=true \
-  --dart-define=MOCK_SCENARIO=success \
-  --dart-define=FIREBASE_ENABLED=true \
-  --dart-define=TELEMETRY_ENABLED=true \
-  --dart-define=ONESIGNAL_APP_ID=
-```
-
-This enables Analytics, Performance Monitoring and Remote Config where supported; Crashlytics is native-only and remains a no-op on web. Mock mode still uses mock accounts and repositories; use the live backend launch above to exercise Firebase signup and sign-in.
+Existing data from the retired Firebase project is not imported. Mobile and backend runtime services use Supabase only.
 
 Normal Android build (temporary validation output):
 
@@ -101,7 +89,6 @@ Normal Android build (temporary validation output):
 flutter build apk --debug --no-pub --target lib/main.dart \
   --dart-define=MOCK_MODE=true \
   --dart-define=MOCK_SCENARIO=success \
-  --dart-define=FIREBASE_ENABLED=false \
   --dart-define=TELEMETRY_ENABLED=false \
   --dart-define=ONESIGNAL_APP_ID=
 ```
@@ -113,7 +100,6 @@ flutter build ios --simulator --debug --no-pub \
   --target lib/main.dart \
   --dart-define=MOCK_MODE=true \
   --dart-define=MOCK_SCENARIO=success \
-  --dart-define=FIREBASE_ENABLED=false \
   --dart-define=TELEMETRY_ENABLED=false \
   --dart-define=ONESIGNAL_APP_ID=
 ```
@@ -138,8 +124,8 @@ Optional diagnostics are build/test tooling, not application configuration: `CAP
 - Generation: rerun `dart run build_runner build`; never hand-edit `.g.dart`. A stale generated file is a source consistency problem, not a reason to disable analysis.
 - Assets: run from the root after Pub resolution. Check [AppAssets](../lib/core/assets/app_assets.dart), [pubspec](../pubspec.yaml) and exact filename case. Do not substitute missing runtime art with removed design references.
 - Android: verify Java 17, installed SDK 36/NDK, network and wrapper permissions. `android/local.properties` is created for the current machine. Existing AGP compatibility flags in [gradle.properties](../android/gradle.properties) are intentional; this handover does not migrate the build system.
-- iOS: resolve Pub first, then `pod install --deployment`. A lock mismatch needs investigation, not `pod update`. Ensure the selected simulator runtime is installed. Keep the workspace's deployment target at least 15.0 for the pinned Firebase dependencies.
-- Optional services: disabled services are expected. With Firebase enabled, initialization errors yield no-ops. Provide approved platform options and native setup before expecting dashboards. Consult [the service guide](OBSERVABILITY_AND_NOTIFICATIONS.md).
+- iOS: resolve Pub first, then `pod install --deployment`. A lock mismatch needs investigation, not `pod update`. Ensure the selected simulator runtime is installed. Keep the workspace's deployment target at least 15.0 for the pinned native dependencies.
+- Optional services: telemetry integrations are disabled and use no-op adapters. Configure OneSignal separately if push notifications are required. Consult [the service guide](OBSERVABILITY_AND_NOTIFICATIONS.md).
 - Native signing: simulator success does not prove device or store signing. Android `release` currently uses the local debug identity; a new developer's debug identity can differ. Do not distribute that build as production or overwrite installed apps with incompatible signing.
 
 ## Current Xcode 27 limitation
@@ -148,6 +134,6 @@ The normal universal simulator build failed in Flutter framework architecture ve
 
 ## Production distribution and environments
 
-The CTO owns package/bundle confirmation, signing certificates/keystores, store accounts, privacy declarations, service registrations and CI access. No private signing material is included. Plan approved development, staging and production configuration with independent service projects and clear release labels. Keep credentials in controlled CI secret storage, not `--dart-define` or source files. See [the recommended environment workflow](https://firebase.google.com/docs/projects/dev-workflows/general-best-practices).
+The CTO owns package/bundle confirmation, signing certificates/keystores, store accounts, privacy declarations, service registrations and CI access. No private signing material is included. Plan approved development, staging and production configuration with independent service projects and clear release labels. Keep credentials in controlled CI secret storage, not `--dart-define` or source files.
 
 Release-mode QA is useful for performance validation with mock data; it is separate from production signing, server integration and store deployment. Source delivery requires none of those external activations.

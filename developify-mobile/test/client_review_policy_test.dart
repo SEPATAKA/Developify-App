@@ -289,7 +289,7 @@ void main() {
         );
         await Future<void>.delayed(const Duration(milliseconds: 5));
         expect(
-          InvestorAccountSummary.from(home.data!).overallBalance,
+          home.summary!.overallBalance,
           expected,
         );
         expect(

@@ -15,7 +15,7 @@ export class AuthUser {
   email!: string;
   type!: 'user' | 'admin';
   role?: string;
-  firebaseUid!: string;
+  supabaseUid!: string;
   entityId?: string;
   entityType?: string;
 }

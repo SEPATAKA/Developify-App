@@ -5,12 +5,13 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { EntityType, VerificationStatus } from '../../firebase/domain.enums';
-import type {
+import { EntityType, VerificationStatus } from '../../supabase/domain.enums';
+import {
   DocumentData,
+  DocumentReference,
   QueryDocumentSnapshot,
-} from 'firebase-admin/firestore';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+  SupabaseDataService,
+} from '../../supabase/supabase-data.service';
 import { UsersService } from '../users/users.service';
 
 /** Manual admin KYC provider. Swap for Smile ID / Onfido later. */
@@ -22,13 +23,13 @@ export class ManualKycProvider {
 @Injectable()
 export class KycService {
   constructor(
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
     private readonly users: UsersService,
     private readonly provider: ManualKycProvider,
   ) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   private toIso(value: unknown): string | null {
@@ -44,7 +45,7 @@ export class KycService {
     throw new Error('A KYC record contains an invalid timestamp.');
   }
 
-  private mapDocument(document: QueryDocumentSnapshot<DocumentData>) {
+  private mapDocument(document: QueryDocumentSnapshot) {
     return {
       id: document.id,
       key: String(document.get('key') ?? ''),
@@ -61,22 +62,22 @@ export class KycService {
     entity: { id: string; entityType: string },
   ) {
     const [documents, memberRows, invites] = await Promise.all([
-      this.firestore
+      this.documents
         .collection('documents')
         .where('draftId', '==', draftId)
         .get(),
-      this.firestore
+      this.documents
         .collection('kycMembers')
         .where('draftId', '==', draftId)
         .get(),
-      this.firestore
+      this.documents
         .collection('kycInvites')
         .where('draftId', '==', draftId)
         .get(),
     ]);
     const members = await Promise.all(
       memberRows.docs.map(async (member) => {
-        const memberDocuments = await this.firestore
+        const memberDocuments = await this.documents
           .collection('documents')
           .where('memberId', '==', member.id)
           .get();
@@ -113,8 +114,8 @@ export class KycService {
   }
 
   private async ensureDraft(entityId: string) {
-    const reference = this.firestore.collection('kycDrafts').doc(entityId);
-    await this.firestore.runTransaction(async (transaction) => {
+    const reference = this.documents.collection('kycDrafts').doc(entityId);
+    await this.documents.runTransaction(async (transaction) => {
       const draft = await transaction.get(reference);
       if (draft.exists) return;
       const now = new Date();
@@ -146,7 +147,7 @@ export class KycService {
   ) {
     const entity = await this.users.resolveEntity(userId, entityType);
     const now = new Date();
-    await this.firestore.collection('kycDrafts').doc(entity.id).set(
+    await this.documents.collection('kycDrafts').doc(entity.id).set(
       {
         entityId: entity.id,
         fields,
@@ -156,7 +157,7 @@ export class KycService {
       },
       { merge: true },
     );
-    await this.firestore
+    await this.documents
       .collection('investorEntities')
       .doc(entity.id)
       .update({
@@ -191,13 +192,8 @@ export class KycService {
     ) {
       throw new BadRequestException('Document metadata is invalid.');
     }
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured for KYC uploads.',
-      );
-    }
-    const uploadedFile = this.firebase.storage
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
+    const uploadedFile = this.supabase.storage
       .bucket(bucketName)
       .file(data.storageKey);
     const [fileMetadata] = await uploadedFile.getMetadata();
@@ -209,7 +205,7 @@ export class KycService {
       throw new BadRequestException('The uploaded KYC file could not be verified.');
     }
     if (data.memberId) {
-      const member = await this.firestore
+      const member = await this.documents
         .collection('kycMembers')
         .doc(data.memberId)
         .get();
@@ -217,7 +213,7 @@ export class KycService {
         throw new NotFoundException('KYC member not found.');
       }
     }
-    await this.firestore.collection('documents').add({
+    await this.documents.collection('documents').add({
       draftId: draft.id,
       memberId: data.memberId ?? null,
       key: data.key,
@@ -241,7 +237,7 @@ export class KycService {
       throw new BadRequestException('A document key is required.');
     }
     if (data.memberId) {
-      const member = await this.firestore
+      const member = await this.documents
         .collection('kycMembers')
         .doc(data.memberId)
         .get();
@@ -249,7 +245,7 @@ export class KycService {
         throw new NotFoundException('KYC member not found.');
       }
     }
-    const snapshot = await this.firestore
+    const snapshot = await this.documents
       .collection('documents')
       .where('draftId', '==', draft.id)
       .get();
@@ -262,12 +258,7 @@ export class KycService {
     if (matches.length === 0) {
       throw new NotFoundException('KYC document not found.');
     }
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured to remove KYC files.',
-      );
-    }
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
     for (const document of matches) {
       const storageKey = document.get('storageKey');
       if (
@@ -276,14 +267,14 @@ export class KycService {
       ) {
         throw new BadRequestException('The KYC file reference is invalid.');
       }
-      const file = this.firebase.storage.bucket(bucketName).file(storageKey);
+      const file = this.supabase.storage.bucket(bucketName).file(storageKey);
       const [metadata] = await file.getMetadata();
       if (metadata.metadata?.ownerId !== userId) {
         throw new BadRequestException('The KYC file could not be verified.');
       }
       await file.delete({ ignoreNotFound: true });
     }
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     for (const document of matches) batch.delete(document.ref);
     await batch.commit();
     return this.load(userId, entityType);
@@ -299,7 +290,7 @@ export class KycService {
       throw new BadRequestException('A KYC member role is required.');
     }
     if (member.id) {
-      const ref = this.firestore.collection('kycMembers').doc(member.id);
+      const ref = this.documents.collection('kycMembers').doc(member.id);
       const existing = await ref.get();
       if (!existing.exists || existing.get('draftId') !== draft.id) {
         throw new NotFoundException('KYC member not found.');
@@ -311,7 +302,7 @@ export class KycService {
         updatedAt: new Date(),
       });
     } else {
-      await this.firestore.collection('kycMembers').add({
+      await this.documents.collection('kycMembers').add({
         draftId: draft.id,
         role: member.role,
         fields: member.fields,
@@ -336,7 +327,7 @@ export class KycService {
       );
     }
     const id = randomUUID();
-    await this.firestore.collection('kycInvites').doc(id).create({
+    await this.documents.collection('kycInvites').doc(id).create({
       draftId: draft.id,
       email,
       role,
@@ -351,19 +342,19 @@ export class KycService {
     const entity = await this.users.resolveEntity(userId, entityType);
     const draft = await this.ensureDraft(entity.id);
     const now = new Date();
-    await this.firestore.collection('kycDrafts').doc(draft.id).update({
+    await this.documents.collection('kycDrafts').doc(draft.id).update({
       status: VerificationStatus.pending,
       submittedAt: now,
       updatedAt: now,
     });
-    await this.firestore
+    await this.documents
       .collection('investorEntities')
       .doc(entity.id)
       .update({
         verificationStatus: VerificationStatus.pending,
         updatedAt: now,
       });
-    const updated = await this.firestore
+    const updated = await this.documents
       .collection('kycDrafts')
       .doc(draft.id)
       .get();
@@ -376,11 +367,11 @@ export class KycService {
     decision: 'verified' | 'correctionRequired' | 'incomplete',
     note?: string,
   ) {
-    const reference = this.firestore.collection('kycDrafts').doc(draftId);
+    const reference = this.documents.collection('kycDrafts').doc(draftId);
     const draft = await reference.get();
     if (!draft.exists) throw new NotFoundException('KYC draft not found.');
     const entityId = String(draft.get('entityId') ?? '');
-    const entityReference = this.firestore
+    const entityReference = this.documents
       .collection('investorEntities')
       .doc(entityId);
     const entity = await entityReference.get();
@@ -393,7 +384,7 @@ export class KycService {
           ? VerificationStatus.correctionRequired
           : VerificationStatus.incomplete;
     const now = new Date();
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     batch.update(reference, {
       status,
       reviewNote: note ?? null,
@@ -405,7 +396,7 @@ export class KycService {
       verificationStatus: status,
       updatedAt: now,
     });
-    const audit = this.firestore.collection('auditLogs').doc();
+    const audit = this.documents.collection('auditLogs').doc();
     batch.create(audit, {
       actorAdminId: adminId,
       action: `kyc.${decision}`,
@@ -423,7 +414,7 @@ export class KycService {
   }
 
   async adminQueue() {
-    const drafts = await this.firestore
+    const drafts = await this.documents
       .collection('kycDrafts')
       .where('status', '==', VerificationStatus.pending)
       .limit(200)
@@ -431,14 +422,14 @@ export class KycService {
     const queue = await Promise.all(
       drafts.docs.map(async (draft) => {
         const entityId = String(draft.get('entityId') ?? '');
-        const entity = await this.firestore
+        const entity = await this.documents
           .collection('investorEntities')
           .doc(entityId)
           .get();
         if (!entity.exists) return null;
         const userId = String(entity.get('userId') ?? '');
-        const user = await this.firestore.collection('users').doc(userId).get();
-        const documents = await this.firestore
+        const user = await this.documents.collection('users').doc(userId).get();
+        const documents = await this.documents
           .collection('documents')
           .where('draftId', '==', draft.id)
           .get();

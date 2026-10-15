@@ -1,15 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, clearSession, setSession } from '@/lib/api';
-import { firebaseAuth } from '@/lib/firebase';
-import {
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,54 +13,63 @@ export default function LoginPage() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
     setNotice('');
+    if (recoveryMode) {
+      try {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setPassword('');
+        setRecoveryMode(false);
+        setNotice(
+          'Your password has been updated. Sign in with the new password.',
+        );
+        await supabase.auth.signOut();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Could not update password.',
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     clearSession();
     try {
-      const credential = await signInWithEmailAndPassword(
-        firebaseAuth,
-        email.trim(),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
         password,
-      );
-      if (!credential.user.emailVerified) {
-        await sendEmailVerification(credential.user);
-        await signOut(firebaseAuth);
-        throw new Error(
-          'Verify your email using the link we just sent, then sign in again.',
-        );
+      });
+      if (error) throw error;
+      if (!data.session) {
+        throw new Error('Supabase did not return an active session.');
       }
-      const idToken = await credential.user.getIdToken(true);
       const result = await api<{
         accessToken: string;
         admin: { id: string; email: string; name: string; role: string };
-      }>('/auth/admin/firebase-session', {
+      }>('/auth/admin/supabase-session', {
         method: 'POST',
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ idToken: data.session.access_token }),
       });
       setSession(result);
       router.replace('/dashboard');
     } catch (err) {
-      await signOut(firebaseAuth);
+      await supabase.auth.signOut();
       clearSession();
-      const firebaseError = err as {
-        code?: string;
-        message?: string;
-      };
-      if (
-        firebaseError.code === 'auth/invalid-credential' ||
-        firebaseError.code === 'auth/user-not-found' ||
-        firebaseError.code === 'auth/wrong-password'
-      ) {
-        setError(
-          'Firebase could not sign in this account. Check that it exists in the configured Firebase project, or reset its password below. A legacy project admin password will not work here.',
-        );
-      } else {
-        setError(firebaseError.message || 'Sign-in failed');
-      }
+      setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {
       setLoading(false);
     }
@@ -82,19 +85,20 @@ export default function LoginPage() {
     setError('');
     setNotice('');
     try {
-      await sendPasswordResetEmail(firebaseAuth, normalizedEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        normalizedEmail,
+        { redirectTo: `${window.location.origin}/login` },
+      );
+      if (error) throw error;
       setNotice(
-        'If this email has a Firebase account, a password reset link has been sent.',
+        'If this email has an admin account, a password reset link has been sent.',
       );
     } catch (err) {
-      const code = (err as { code?: string }).code;
-      if (code === 'auth/invalid-email') {
-        setError('Enter a valid email address.');
-      } else {
-        setError(
-          'Could not request a password reset. Check Firebase Authentication settings and try again.',
-        );
-      }
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not request a password reset.',
+      );
     } finally {
       setResettingPassword(false);
     }
@@ -110,7 +114,9 @@ export default function LoginPage() {
           <p className="text-xs uppercase tracking-wide text-emerald-700">
             Developify
           </p>
-          <h1 className="text-2xl font-semibold">Admin sign in</h1>
+          <h1 className="text-2xl font-semibold">
+            {recoveryMode ? 'Set a new password' : 'Admin sign in'}
+          </h1>
         </div>
         <label className="block text-sm">
           Email
@@ -119,11 +125,12 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
-            required
+            required={!recoveryMode}
+            disabled={recoveryMode}
           />
         </label>
         <label className="block text-sm">
-          Password
+          {recoveryMode ? 'New password' : 'Password'}
           <input
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2"
             value={password}
@@ -135,7 +142,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={resetPassword}
-          disabled={loading || resettingPassword}
+          disabled={loading || resettingPassword || recoveryMode}
           className="text-sm text-emerald-800 underline disabled:opacity-60"
         >
           {resettingPassword ? 'Sending reset link…' : 'Forgot password?'}
@@ -146,7 +153,13 @@ export default function LoginPage() {
           disabled={loading}
           className="w-full rounded bg-emerald-700 px-3 py-2 text-white disabled:opacity-60"
         >
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading
+            ? recoveryMode
+              ? 'Updating password…'
+              : 'Signing in…'
+            : recoveryMode
+              ? 'Update password'
+              : 'Sign in'}
         </button>
       </form>
     </div>

@@ -1,4 +1,3 @@
-import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -6,14 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:developify_mobile/app/router/route_names.dart';
 import 'package:developify_mobile/core/assets/app_assets.dart';
 import 'package:developify_mobile/core/errors/result.dart';
+import 'package:developify_mobile/core/models/monetary_amount.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
-import 'package:developify_mobile/core/utils/money.dart';
 import 'package:developify_mobile/core/widgets/app_icon.dart';
 import 'package:developify_mobile/core/widgets/app_button.dart';
 import 'package:developify_mobile/core/widgets/states.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
-import 'package:developify_mobile/features/investor/domain/portfolio_analytics.dart';
 import 'package:developify_mobile/features/investor/presentation/investor_route_names.dart';
 import 'package:developify_mobile/features/investor/presentation/stores/investor_home_store.dart';
 import 'package:developify_mobile/features/investor/presentation/widgets/investor_components.dart';
@@ -33,21 +31,9 @@ class InvestorHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Observer(
     builder: (_) {
-      final hasData = store.data != null;
-      final data =
-          store.data ??
-          InvestorAccountSnapshot(
-            balances: const {},
-            investments: const [],
-            transactions: const [],
-            notifications: const [],
-            paymentMethods: const [],
-            verification: VerificationStatus.verified,
-            asOf: DateTime.now(),
-          );
-      final portfolio =
-          store.portfolio ??
-          PortfolioAnalytics.from(data, PortfolioPeriod.month);
+      final summary = store.summary;
+      final hasBalance = summary != null;
+      final verification = summary?.verification;
       final featured = store.projects
           .where(
             (project) =>
@@ -55,7 +41,7 @@ class InvestorHomeScreen extends StatelessWidget {
           )
           .toList();
       final recent = [
-        if (data.investments.isNotEmpty)
+        if ((summary?.investedCapital.minorUnits ?? 0) > 0)
           for (final id in [
             'saffron-towers',
             'lissana-villa',
@@ -78,18 +64,17 @@ class InvestorHomeScreen extends StatelessWidget {
               backgroundFilm: AppColors.investorHomeFilm,
               fractionColor: AppColors.investorBalanceFraction,
               showTrendIcon: true,
-              amount: InvestorAccountSummary.from(data).overallBalance,
+              amount:
+                  summary?.overallBalance ??
+                  const MonetaryAmount(0, Currency.zar),
               visible: store.balanceVisible,
               showAmount: true,
-              amountPlaceholder: hasData
+              amountPlaceholder: hasBalance
                   ? null
-                  : store.status == LoadStatus.error
+                  : store.balanceStatus == LoadStatus.error
                   ? 'Balance unavailable'
                   : 'Loading balance…',
               onToggle: store.toggleBalance,
-              change: hasData
-                  ? '${Money.amount(portfolio.projectedReturns, showPositiveSign: true)} projected returns'
-                  : null,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -164,7 +149,7 @@ class InvestorHomeScreen extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(12.w, 24.w, 12.w, 0),
           child: Column(
             children: [
-              if (!hasData && store.status == LoadStatus.error)
+              if (!hasBalance && store.balanceStatus == LoadStatus.error)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -187,28 +172,28 @@ class InvestorHomeScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              if (hasData && store.error != null) ...[
+              if (hasBalance && store.error != null) ...[
                 InlineError(store.error),
                 TextButton(
                   onPressed: store.load,
                   child: const Text('Try again'),
                 ),
               ],
-              if (hasData &&
-                  data.verification != VerificationStatus.verified) ...[
+              if (verification != null &&
+                  verification != VerificationStatus.verified) ...[
                 _VerificationBanner(
-                  title: switch (data.verification) {
+                  title: switch (verification) {
                     VerificationStatus.pending => 'Verification in review',
                     VerificationStatus.correctionRequired =>
                       'Verification needs attention',
                     _ => 'Complete your verification',
                   },
                   onTap: () => context.pushNamed(
-                    data.verification == VerificationStatus.incomplete
+                    verification == VerificationStatus.incomplete
                         ? InvestorRoutes.kycIntro
                         : InvestorRoutes.kyc,
                     pathParameters:
-                        data.verification == VerificationStatus.incomplete
+                        verification == VerificationStatus.incomplete
                         ? const {}
                         : {'entity': entity().name, 'step': 'overview'},
                   ),
@@ -226,12 +211,6 @@ class InvestorHomeScreen extends StatelessWidget {
           InvestorEmptyState(
             title: 'No projects yet',
             message: 'New projects will appear here when they are available.',
-            action: !hasData && store.status == LoadStatus.error
-                ? null
-                : 'Try again',
-            onAction: !hasData && store.status == LoadStatus.error
-                ? null
-                : store.load,
           )
         else if (MediaQuery.textScalerOf(context).scale(14) > 18)
           Padding(

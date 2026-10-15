@@ -11,9 +11,12 @@ import {
   TransactionKind,
   TransactionStatus,
   VerificationStatus,
-} from '../../firebase/domain.enums';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
-import { firestoreDate } from '../../firebase/firestore-date';
+} from '../../supabase/domain.enums';
+import {
+  DocumentData,
+  SupabaseDataService,
+} from '../../supabase/supabase-data.service';
+import { documentDate } from '../../supabase/document-date';
 import { LedgerService } from '../ledger/ledger.service';
 import { UsersService } from '../users/users.service';
 import { parseAmountCents } from './amount-cents';
@@ -21,14 +24,14 @@ import { parseAmountCents } from './amount-cents';
 @Injectable()
 export class InvestmentsService {
   constructor(
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
     private readonly ledger: LedgerService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
   ) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   private transactionId(entityId: string, operationId: string) {
@@ -37,7 +40,7 @@ export class InvestmentsService {
       .digest('hex');
   }
 
-  private mapTransaction(id: string, data: FirebaseFirestore.DocumentData) {
+  private mapTransaction(id: string, data: DocumentData) {
     return {
       transactionId: id,
       investmentId: data.investmentId ?? null,
@@ -56,7 +59,7 @@ export class InvestmentsService {
   ) {
     const amount = parseAmountCents(amountCents);
     const entity = await this.users.resolveEntity(userId, entityType);
-    const projectRef = this.firestore.collection('projects').doc(projectId);
+    const projectRef = this.documents.collection('projects').doc(projectId);
     const project = await projectRef.get();
     const data = project.data();
     if (!data || data.status !== 'open') {
@@ -72,7 +75,7 @@ export class InvestmentsService {
     }
     const ttl = Number(this.config.get('QUOTE_TTL_MINUTES', 10));
     const expiresAt = new Date(Date.now() + ttl * 60 * 1000);
-    const quoteRef = this.firestore.collection('investmentQuotes').doc();
+    const quoteRef = this.documents.collection('investmentQuotes').doc();
     await quoteRef.create({
       entityId: entity.id,
       projectId,
@@ -113,22 +116,22 @@ export class InvestmentsService {
 
     const amountRequested = parseAmountCents(input.amountCents);
     const id = this.transactionId(entity.id, input.operationId);
-    const transactionRef = this.firestore.collection('transactions').doc(id);
-    const projectRef = this.firestore
+    const transactionRef = this.documents.collection('transactions').doc(id);
+    const projectRef = this.documents
       .collection('projects')
       .doc(input.projectId);
     const quoteRef = input.quoteId
-      ? this.firestore.collection('investmentQuotes').doc(input.quoteId)
+      ? this.documents.collection('investmentQuotes').doc(input.quoteId)
       : null;
     const wallet = await this.ledger.ensureWallet(entity.id);
     const held = await this.ledger.ensureTypedAccount(
       LedgerAccountType.heldPrincipal,
     );
-    const investmentRef = this.firestore.collection('investments').doc();
+    const investmentRef = this.documents.collection('investments').doc();
     const reference = `INV-${randomUUID().slice(0, 8).toUpperCase()}`;
     const now = new Date();
 
-    return this.firestore.runTransaction(async (transaction) => {
+    return this.documents.runTransaction(async (transaction) => {
       const snapshots = await Promise.all([
         transaction.get(transactionRef),
         transaction.get(projectRef),
@@ -155,7 +158,7 @@ export class InvestmentsService {
           quote.entityId !== entity.id ||
           quote.projectId !== input.projectId ||
           quote.consumedAt ||
-          firestoreDate(quote.expiresAt).getTime() <= now.getTime()
+          documentDate(quote.expiresAt).getTime() <= now.getTime()
         ) {
           throw new BadRequestException(
             'Investment quote is invalid or expired.',
@@ -218,7 +221,7 @@ export class InvestmentsService {
         createdAt: now,
         updatedAt: now,
       });
-      const milestones = this.firestore.collection('investmentMilestones');
+      const milestones = this.documents.collection('investmentMilestones');
       transaction.create(milestones.doc(), {
         investmentId: investmentRef.id,
         stage: 'confirmed',
@@ -249,7 +252,7 @@ export class InvestmentsService {
         updatedAt: now,
       });
       if (quoteRef) transaction.update(quoteRef, { consumedAt: now });
-      transaction.create(this.firestore.collection('notifications').doc(), {
+      transaction.create(this.documents.collection('notifications').doc(), {
         userId: input.userId,
         entityId: entity.id,
         title: 'Investment confirmed',
@@ -282,7 +285,7 @@ export class InvestmentsService {
     if (!/^\d{7}$/.test(investorNumber)) {
       throw new BadRequestException('Investor ID must be seven digits.');
     }
-    const users = await this.firestore
+    const users = await this.documents
       .collection('users')
       .where('investorNumber', '==', investorNumber)
       .limit(1)
@@ -297,19 +300,19 @@ export class InvestmentsService {
     }
 
     const id = this.transactionId(entity.id, input.idempotencyKey);
-    const transactionRef = this.firestore.collection('transactions').doc(id);
-    const projectRef = this.firestore
+    const transactionRef = this.documents.collection('transactions').doc(id);
+    const projectRef = this.documents
       .collection('projects')
       .doc(input.projectId);
     const wallet = await this.ledger.ensureWallet(entity.id);
     const held = await this.ledger.ensureTypedAccount(
       LedgerAccountType.heldPrincipal,
     );
-    const investmentRef = this.firestore.collection('investments').doc();
+    const investmentRef = this.documents.collection('investments').doc();
     const reference = `ALC-${randomUUID().slice(0, 8).toUpperCase()}`;
     const now = new Date();
 
-    return this.firestore.runTransaction(async (transaction) => {
+    return this.documents.runTransaction(async (transaction) => {
       const [existing, projectSnapshot] = await Promise.all([
         transaction.get(transactionRef),
         transaction.get(projectRef),
@@ -382,7 +385,7 @@ export class InvestmentsService {
         updatedAt: now,
       });
       transaction.create(
-        this.firestore.collection('investmentMilestones').doc(),
+        this.documents.collection('investmentMilestones').doc(),
         {
           investmentId: investmentRef.id,
           stage: 'confirmed',
@@ -397,7 +400,7 @@ export class InvestmentsService {
         status: newFunded >= capacity ? 'funded' : 'open',
         updatedAt: now,
       });
-      transaction.create(this.firestore.collection('auditLogs').doc(), {
+      transaction.create(this.documents.collection('auditLogs').doc(), {
         actorAdminId: input.adminId,
         action: 'investment.allocate',
         resource: 'investment',
@@ -409,7 +412,7 @@ export class InvestmentsService {
         },
         createdAt: now,
       });
-      transaction.create(this.firestore.collection('notifications').doc(), {
+      transaction.create(this.documents.collection('notifications').doc(), {
         userId: user.id,
         entityId: entity.id,
         title: 'Funds allocated',
@@ -432,7 +435,7 @@ export class InvestmentsService {
   }
 
   async adminListAllocations() {
-    const investments = await this.firestore
+    const investments = await this.documents
       .collection('investments')
       .orderBy('createdAt', 'desc')
       .limit(100)
@@ -441,21 +444,21 @@ export class InvestmentsService {
       investments.docs.map(async (investment) => {
         const data = investment.data();
         const [project, entity] = await Promise.all([
-          this.firestore.collection('projects').doc(data.projectId).get(),
-          this.firestore
+          this.documents.collection('projects').doc(data.projectId).get(),
+          this.documents
             .collection('investorEntities')
             .doc(data.entityId)
             .get(),
         ]);
         const userId = entity.get('userId');
         const user = userId
-          ? await this.firestore.collection('users').doc(userId).get()
+          ? await this.documents.collection('users').doc(userId).get()
           : null;
         return {
           id: investment.id,
           amountCents: Number(data.amountCents),
           status: data.status,
-          createdAt: firestoreDate(data.createdAt).toISOString(),
+          createdAt: documentDate(data.createdAt).toISOString(),
           projectName: project.get('name') ?? '',
           town: project.get('town') ?? '',
           investorName: user?.get('name') ?? '',

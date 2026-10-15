@@ -6,7 +6,10 @@ import 'package:developify_mobile/features/authentication/domain/landowner_regis
 
 abstract interface class AuthRepository {
   bool get emailVerificationPending;
-  bool get usesFirebaseEmailLink;
+  bool get usesEmailVerificationLink;
+  bool get passwordRecoveryPending;
+  String? get recoveryEmail;
+  Stream<void> get passwordRecoveryEvents;
   Future<Result<String>> beginInvestorRegistration(
     InvestorRegistration registration, {
     Cancellation? cancellation,
@@ -28,4 +31,5 @@ abstract interface class AuthRepository {
   Future<Result<void>> requestRecovery(String email);
   Future<Result<void>> verifyRecovery(String code);
   Future<Result<void>> resetPassword(String password);
+  void dispose();
 }

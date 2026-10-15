@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearSession, getSession } from '@/lib/api';
-import { firebaseAuth } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 
 const links = [
@@ -41,14 +40,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, [pathname, router]);
 
-  useEffect(
-    () =>
-      onAuthStateChanged(firebaseAuth, (user) => {
-        setEmail(user?.email ?? '');
-        setUid(user?.uid ?? '');
-      }),
-    [],
-  );
+  useEffect(() => {
+    let mounted = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!mounted) return;
+      setEmail(data.user?.email ?? '');
+      setUid(data.user?.id ?? '');
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setEmail(session?.user.email ?? '');
+      setUid(session?.user.id ?? '');
+    });
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
 
   if (!ready) {
     return (
@@ -76,7 +84,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             ) : null}
             {uid ? (
               <p className="mt-1 break-all text-[10px] text-zinc-400">
-                Firebase UID: {uid}
+                Supabase user ID: {uid}
               </p>
             ) : null}
           </div>
@@ -105,7 +113,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <button
             className="mt-8 w-full rounded border border-zinc-300 px-3 py-2 text-sm"
             onClick={async () => {
-              await signOut(firebaseAuth);
+              await supabase.auth.signOut();
               clearSession();
               router.replace('/login');
             }}

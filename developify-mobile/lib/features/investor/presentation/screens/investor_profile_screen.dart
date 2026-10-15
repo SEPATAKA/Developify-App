@@ -16,7 +16,7 @@ import 'package:developify_mobile/features/investor/presentation/widgets/investo
 import 'package:developify_mobile/features/investor/presentation/widgets/investor_logout_sheet.dart';
 import 'package:developify_mobile/features/profile/presentation/widgets/profile_menu_row.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
-import 'package:developify_mobile/features/authentication/presentation/widgets/firebase_identity_card.dart';
+import 'package:developify_mobile/features/authentication/presentation/widgets/account_identity_card.dart';
 
 class InvestorProfileScreen extends StatelessWidget {
   const InvestorProfileScreen({
@@ -24,12 +24,10 @@ class InvestorProfileScreen extends StatelessWidget {
     required this.store,
     required this.onLogout,
     required this.session,
-    required this.firebaseIdentity,
   });
   final InvestorProfileStore store;
   final VoidCallback onLogout;
   final SessionService session;
-  final bool firebaseIdentity;
   Future<void> _open(
     BuildContext context,
     String route, {
@@ -88,9 +86,8 @@ class InvestorProfileScreen extends StatelessWidget {
                   SliverPadding(
                     padding: EdgeInsets.symmetric(horizontal: 13.w),
                     sliver: SliverToBoxAdapter(
-                      child: FirebaseIdentityCard(
+                      child: AccountIdentityCard(
                         user: user,
-                        firebaseIdentity: firebaseIdentity,
                       ),
                     ),
                   ),

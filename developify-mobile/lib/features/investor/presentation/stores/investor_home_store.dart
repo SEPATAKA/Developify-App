@@ -2,10 +2,10 @@ import 'dart:async';
 import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
+import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_project.dart';
 import 'package:developify_mobile/features/investor/domain/investor_repository.dart';
-import 'package:developify_mobile/features/investor/domain/portfolio_analytics.dart';
 part 'investor_home_store.g.dart';
 
 class InvestorHomeStore = InvestorHomeStoreBase with _$InvestorHomeStore;
@@ -19,7 +19,13 @@ abstract class InvestorHomeStoreBase with Store, Lifecycle {
       if (event.kinds.contains(InvestorDataKind.privacy)) return;
       if (isDisposed) return;
       if (event.kinds.contains(InvestorDataKind.scope)) {
-        runInAction(() => data = null);
+        runInAction(() {
+          summary = null;
+          balanceStatus = LoadStatus.initial;
+          status = LoadStatus.initial;
+          projects = const [];
+          error = null;
+        });
       }
       unawaited(load());
     });
@@ -46,40 +52,46 @@ abstract class InvestorHomeStoreBase with Store, Lifecycle {
   @observable
   LoadStatus status = LoadStatus.initial;
   @observable
-  InvestorAccountSnapshot? data;
+  LoadStatus balanceStatus = LoadStatus.initial;
+  @observable
+  InvestorAccountSummary? summary;
   @observable
   List<InvestorProject> projects = const [];
   @observable
   Set<String> favourites = const {};
   @observable
   String? error;
-  @computed
-  PortfolioAnalytics? get portfolio => data == null
-      ? null
-      : PortfolioAnalytics.from(data!, PortfolioPeriod.month);
   @action
   Future<void> load() async {
     if (isDisposed) return;
     final request = beginRequest();
     status = LoadStatus.loading;
+    balanceStatus = LoadStatus.loading;
     error = null;
-    final results = await (_account.snapshot(), _catalog.projects()).wait;
+    final results = await (_account.balance(), _catalog.projects()).wait;
     if (!isCurrent(request)) return;
     runInAction(() {
-      if (results.$1 case Failure(:final error)) {
+      if (results.$1 case Success<InvestorAccountSummary>(:final value)) {
+        summary = value;
+        balanceStatus = LoadStatus.success;
+      } else if (results.$1 case Failure(:final error)) {
+        summary = null;
+        balanceStatus = LoadStatus.error;
         this.error = error.message;
-        status = LoadStatus.error;
-        return;
       }
-      if (results.$2 case Failure(:final error)) {
-        this.error = error.message;
-        status = LoadStatus.error;
-        return;
+
+      if (results.$2 case Success<List<InvestorProject>>(:final value)) {
+        projects = value;
+        favourites = _catalog.favouriteIds;
+      } else if (results.$2 case Failure(:final error)) {
+        this.error ??= error.message;
       }
-      data = (results.$1 as Success<InvestorAccountSnapshot>).value;
-      projects = (results.$2 as Success<List<InvestorProject>>).value;
-      favourites = _catalog.favouriteIds;
-      status = projects.isEmpty ? LoadStatus.empty : LoadStatus.success;
+      status =
+          balanceStatus == LoadStatus.error || error != null
+              ? LoadStatus.error
+              : projects.isEmpty
+              ? LoadStatus.empty
+              : LoadStatus.success;
     });
   }
 

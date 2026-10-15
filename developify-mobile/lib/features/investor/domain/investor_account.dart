@@ -91,6 +91,16 @@ final class InvestorPaymentMethod {
 }
 
 abstract final class InvestorDepositAccount {
+  static const paystackMethod = InvestorPaymentMethod(
+    id: 'paystack-card-checkout',
+    kind: PaymentMethodKind.card,
+    name: 'Paystack secure checkout',
+    lastFour: '',
+    holder: 'Card details are entered securely on Paystack',
+    reusable: false,
+    isDefault: true,
+  );
+
   static const method = InvestorPaymentMethod(
     id: 'developify-deposit',
     kind: PaymentMethodKind.bankAccount,
@@ -373,9 +383,11 @@ final class InvestorOperationReceipt {
     this.investmentId,
     this.status = InvestorTransactionStatus.successful,
     this.paymentInstructions,
+    this.checkoutUrl,
   });
   final String transactionId;
   final String? investmentId;
   final InvestorTransactionStatus status;
   final InvestorPaymentInstructions? paymentInstructions;
+  final String? checkoutUrl;
 }

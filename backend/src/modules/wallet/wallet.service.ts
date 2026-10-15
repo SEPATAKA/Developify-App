@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  InternalServerErrorException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,25 +13,33 @@ import {
   TransactionKind,
   TransactionStatus,
   VerificationStatus,
-} from '../../firebase/domain.enums';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
-import { firestoreDate } from '../../firebase/firestore-date';
+} from '../../supabase/domain.enums';
+import {
+  DocumentData,
+  DocumentReference,
+  SupabaseDataService,
+} from '../../supabase/supabase-data.service';
+import { documentDate } from '../../supabase/document-date';
 import { LedgerService } from '../ledger/ledger.service';
 import { UsersService } from '../users/users.service';
-import { PaymentService } from '../payments/payment.service';
+import {
+  PAYSTACK_CARD_METHOD_ID,
+  PaymentProvider,
+  PaymentService,
+} from '../payments/payment.service';
 
 @Injectable()
 export class WalletService {
   constructor(
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
     private readonly ledger: LedgerService,
     private readonly users: UsersService,
     private readonly payments: PaymentService,
     private readonly config: ConfigService,
   ) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   private idempotentId(entityId: string, operationId: string) {
@@ -39,7 +48,7 @@ export class WalletService {
       .digest('hex');
   }
 
-  private mapTx(id: string, transaction: FirebaseFirestore.DocumentData) {
+  private mapTx(id: string, transaction: DocumentData) {
     return {
       id,
       kind: transaction.kind,
@@ -50,17 +59,17 @@ export class WalletService {
       reference: transaction.reference,
       projectId: transaction.projectId ?? null,
       investmentId: transaction.investmentId ?? null,
-      createdAt: firestoreDate(transaction.createdAt).toISOString(),
+      createdAt: documentDate(transaction.createdAt).toISOString(),
     };
   }
 
   private async mapInvestment(
     id: string,
-    investment: FirebaseFirestore.DocumentData,
+    investment: DocumentData,
   ) {
     const [project, milestones] = await Promise.all([
-      this.firestore.collection('projects').doc(investment.projectId).get(),
-      this.firestore
+      this.documents.collection('projects').doc(investment.projectId).get(),
+      this.documents
         .collection('investmentMilestones')
         .where('investmentId', '==', id)
         .get(),
@@ -75,21 +84,50 @@ export class WalletService {
       termMonths: Number(investment.termMonths),
       status: investment.status,
       principalHeld: Boolean(investment.principalHeld),
-      createdAt: firestoreDate(investment.createdAt).toISOString(),
+      createdAt: documentDate(investment.createdAt).toISOString(),
       milestones: milestones.docs.map((milestone) => {
         const data = milestone.data();
         return {
           id: milestone.id,
           stage: data.stage,
           title: data.title,
-          dueAt: data.dueAt ? firestoreDate(data.dueAt).toISOString() : null,
+          dueAt: data.dueAt ? documentDate(data.dueAt).toISOString() : null,
           completedAt: data.completedAt
-            ? firestoreDate(data.completedAt).toISOString()
+            ? documentDate(data.completedAt).toISOString()
             : null,
           amountCents:
             data.amountCents != null ? Number(data.amountCents) : null,
         };
       }),
+    };
+  }
+
+  async balance(userId: string, entityType?: string) {
+    const entity = await this.users.resolveEntity(userId, entityType);
+    const [walletBalance, investmentSnapshot] = await Promise.all([
+      this.ledger.walletBalanceForEntity(entity.id),
+      this.documents
+        .collection('investments')
+        .where('entityId', '==', entity.id)
+        .get(),
+    ]);
+    const availableCents = Number(walletBalance);
+    if (!Number.isSafeInteger(availableCents)) {
+      throw new InternalServerErrorException('Ledger balance is invalid.');
+    }
+    const heldPrincipalCents = investmentSnapshot.docs
+      .map((doc) => doc.data())
+      .filter(
+        (investment) =>
+          investment.principalHeld &&
+          investment.status === InvestmentStatus.active,
+      )
+      .reduce((sum, investment) => sum + Number(investment.amountCents), 0);
+    return {
+      availableCents,
+      heldPrincipalCents,
+      verificationStatus: entity.verificationStatus,
+      currency: 'ZAR',
     };
   }
 
@@ -103,22 +141,22 @@ export class WalletService {
       methodSnapshot,
       notificationSnapshot,
     ] = await Promise.all([
-      this.ledger.balanceCents(wallet.id),
-      this.firestore
+      this.ledger.accountBalanceCents(wallet),
+      this.documents
         .collection('investments')
         .where('entityId', '==', entity.id)
         .get(),
-      this.firestore
+      this.documents
         .collection('transactions')
         .where('entityId', '==', entity.id)
         .orderBy('createdAt', 'desc')
         .limit(50)
         .get(),
-      this.firestore
+      this.documents
         .collection('paymentMethods')
         .where('entityId', '==', entity.id)
         .get(),
-      this.firestore
+      this.documents
         .collection('notifications')
         .where('userId', '==', userId)
         .orderBy('createdAt', 'desc')
@@ -130,8 +168,8 @@ export class WalletService {
       .map((doc) => ({ id: doc.id, data: doc.data() }))
       .sort(
         (a, b) =>
-          firestoreDate(b.data.createdAt).getTime() -
-          firestoreDate(a.data.createdAt).getTime(),
+          documentDate(b.data.createdAt).getTime() -
+          documentDate(a.data.createdAt).getTime(),
       );
     const heldPrincipalCents = investments
       .filter(
@@ -147,8 +185,8 @@ export class WalletService {
       .map((doc) => ({ id: doc.id, data: doc.data() }))
       .sort(
         (a, b) =>
-          firestoreDate(b.data.createdAt).getTime() -
-          firestoreDate(a.data.createdAt).getTime(),
+          documentDate(b.data.createdAt).getTime() -
+          documentDate(a.data.createdAt).getTime(),
       );
     const notifications = notificationSnapshot.docs
       .map((doc) => ({ id: doc.id, data: doc.data() }))
@@ -157,8 +195,8 @@ export class WalletService {
       )
       .sort(
         (a, b) =>
-          firestoreDate(b.data.createdAt).getTime() -
-          firestoreDate(a.data.createdAt).getTime(),
+          documentDate(b.data.createdAt).getTime() -
+          documentDate(a.data.createdAt).getTime(),
       )
       .slice(0, 50);
 
@@ -169,6 +207,7 @@ export class WalletService {
       availableCents: Number(availableCents),
       heldPrincipalCents,
       currency: 'ZAR',
+      cardPaymentsEnabled: this.payments.cardPaymentsEnabled,
       investments: await Promise.all(
         investments.map(({ id, data }) => this.mapInvestment(id, data)),
       ),
@@ -191,7 +230,7 @@ export class WalletService {
         body: data.body,
         kind: data.kind,
         read: !!data.readAt,
-        createdAt: firestoreDate(data.createdAt).toISOString(),
+        createdAt: documentDate(data.createdAt).toISOString(),
         payload: data.payload ?? {},
       })),
       depositInstructions: {
@@ -205,7 +244,7 @@ export class WalletService {
 
   async getTransaction(userId: string, id: string, entityType?: string) {
     const entity = await this.users.resolveEntity(userId, entityType);
-    const transaction = await this.firestore
+    const transaction = await this.documents
       .collection('transactions')
       .doc(id)
       .get();
@@ -217,7 +256,7 @@ export class WalletService {
 
   async getInvestment(userId: string, id: string, entityType?: string) {
     const entity = await this.users.resolveEntity(userId, entityType);
-    const investment = await this.firestore
+    const investment = await this.documents
       .collection('investments')
       .doc(id)
       .get();
@@ -244,24 +283,42 @@ export class WalletService {
       input.entityType,
     );
     const transactionId = this.idempotentId(entity.id, input.operationId);
-    const transactionRef = this.firestore
+    const transactionRef = this.documents
       .collection('transactions')
       .doc(transactionId);
     const existing = await transactionRef.get();
-    if (existing.exists) return this.mapTx(existing.id, existing.data()!);
+    if (existing.exists) {
+      const data = existing.data()!;
+      const metadata =
+        typeof data.metadata === 'object' && data.metadata !== null
+          ? data.metadata
+          : {};
+      return {
+        ...this.mapTx(existing.id, data),
+        ...(typeof metadata.checkoutUrl === 'string'
+          ? { checkoutUrl: metadata.checkoutUrl }
+          : {}),
+        ...(metadata.reference ? { instructions: metadata } : {}),
+      };
+    }
     if (entity.verificationStatus !== VerificationStatus.verified) {
       throw new BadRequestException(
         'Complete verification before funding your wallet.',
       );
     }
-    const method = await this.firestore
-      .collection('paymentMethods')
-      .doc(input.methodId)
-      .get();
-    if (!method.exists || method.get('entityId') !== entity.id) {
-      throw new BadRequestException('Payment method not found.');
+    const paystackCard =
+      input.methodId === PAYSTACK_CARD_METHOD_ID &&
+      this.payments.cardPaymentsEnabled;
+    if (!paystackCard) {
+      const method = await this.documents
+        .collection('paymentMethods')
+        .doc(input.methodId)
+        .get();
+      if (!method.exists || method.get('entityId') !== entity.id) {
+        throw new BadRequestException('Payment method not found.');
+      }
     }
-    const user = await this.firestore
+    const user = await this.documents
       .collection('users')
       .doc(input.userId)
       .get();
@@ -270,13 +327,19 @@ export class WalletService {
       ? `${user.get('investorNumber')}-${suffix}`
       : `DEP-${suffix}`;
     const amount = BigInt(input.amountCents);
-    const payment = await this.payments.active.initiateDeposit({
-      amountCents: amount,
-      reference,
-      entityId: entity.id,
-    });
+    const paymentProvider = paystackCard
+      ? this.payments.paystackTestProvider
+      : this.payments.manualProvider;
+    const payment: Awaited<ReturnType<PaymentProvider['initiateDeposit']>> =
+      await paymentProvider.initiateDeposit({
+        amountCents: amount,
+        reference,
+        entityId: entity.id,
+        transactionId,
+        email: String(user.get('email') ?? ''),
+      });
     const now = new Date();
-    await this.firestore.runTransaction(async (transaction) => {
+    await this.documents.runTransaction(async (transaction) => {
       const current = await transaction.get(transactionRef);
       if (current.exists) return;
       transaction.create(transactionRef, {
@@ -290,14 +353,25 @@ export class WalletService {
         reference,
         idempotencyKey: input.operationId,
         methodId: input.methodId,
-        metadata: payment.instructions,
+        metadata: {
+          ...(payment.instructions ?? {}),
+          ...(payment.checkoutUrl ? { checkoutUrl: payment.checkoutUrl } : {}),
+        },
         createdAt: now,
       });
     });
     const created = await transactionRef.get();
+    const createdData = created.data()!;
+    const createdMetadata =
+      typeof createdData.metadata === 'object' && createdData.metadata !== null
+        ? createdData.metadata
+        : {};
     return {
-      ...this.mapTx(created.id, created.data()!),
-      instructions: payment.instructions,
+      ...this.mapTx(created.id, createdData),
+      ...(typeof createdMetadata.checkoutUrl === 'string'
+        ? { checkoutUrl: createdMetadata.checkoutUrl }
+        : {}),
+      ...(createdMetadata.reference ? { instructions: createdMetadata } : {}),
     };
   }
 
@@ -318,7 +392,7 @@ export class WalletService {
       input.entityType,
     );
     const id = this.idempotentId(entity.id, input.operationId);
-    const transactionRef = this.firestore.collection('transactions').doc(id);
+    const transactionRef = this.documents.collection('transactions').doc(id);
     const existing = await transactionRef.get();
     if (existing.exists) return this.mapTx(existing.id, existing.data()!);
     const feeValue = Number(this.config.get('WITHDRAWAL_FEE_CENTS', '150'));
@@ -331,7 +405,7 @@ export class WalletService {
     if (currentBalance < amount + fee) {
       throw new BadRequestException('Insufficient available balance.');
     }
-    const method = await this.firestore
+    const method = await this.documents
       .collection('paymentMethods')
       .doc(input.methodId)
       .get();
@@ -351,7 +425,7 @@ export class WalletService {
       this.ledger.ensureTypedAccount(LedgerAccountType.feeRevenue),
     ]);
     const now = new Date();
-    await this.firestore.runTransaction(async (transaction) => {
+    await this.documents.runTransaction(async (transaction) => {
       const current = await transaction.get(transactionRef);
       if (current.exists) return;
       await this.ledger.postEntries(transaction, [
@@ -407,7 +481,7 @@ export class WalletService {
       throw new BadRequestException('Bank details are incomplete.');
     }
     const entity = await this.users.resolveEntity(userId, data.entityType);
-    const method = this.firestore.collection('paymentMethods').doc();
+    const method = this.documents.collection('paymentMethods').doc();
     const record = {
       userId,
       entityId: entity.id,
@@ -435,7 +509,7 @@ export class WalletService {
 
   async removePaymentMethod(userId: string, id: string, entityType?: string) {
     const entity = await this.users.resolveEntity(userId, entityType);
-    const method = this.firestore.collection('paymentMethods').doc(id);
+    const method = this.documents.collection('paymentMethods').doc(id);
     const snapshot = await method.get();
     if (snapshot.exists && snapshot.get('entityId') === entity.id) {
       await method.delete();
@@ -450,12 +524,12 @@ export class WalletService {
     entityType?: string,
   ) {
     const entity = await this.users.resolveEntity(userId, entityType);
-    const collection = this.firestore.collection('paymentMethods');
+    const collection = this.documents.collection('paymentMethods');
     const methods = await collection.where('entityId', '==', entity.id).get();
     if (!methods.docs.some((method) => method.id === id)) {
       throw new NotFoundException('Payment method not found.');
     }
-    await this.firestore.runTransaction(async (transaction) => {
+    await this.documents.runTransaction(async (transaction) => {
       const latest = await Promise.all(
         methods.docs.map((method) => transaction.get(method.ref)),
       );
@@ -476,7 +550,7 @@ export class WalletService {
   }
 
   async markNotificationsRead(userId: string, id?: string) {
-    const notifications = this.firestore.collection('notifications');
+    const notifications = this.documents.collection('notifications');
     const snapshot = id ? await notifications.doc(id).get() : null;
     if (snapshot) {
       if (
@@ -493,7 +567,7 @@ export class WalletService {
       (notification) => !notification.get('readAt'),
     );
     for (let start = 0; start < unread.length; start += 450) {
-      const batch = this.firestore.batch();
+      const batch = this.documents.batch();
       for (const notification of unread.slice(start, start + 450)) {
         batch.update(notification.ref, { readAt: new Date() });
       }
@@ -503,7 +577,7 @@ export class WalletService {
   }
 
   async confirmDeposit(adminId: string, transactionId: string) {
-    const transactionRef = this.firestore
+    const transactionRef = this.documents
       .collection('transactions')
       .doc(transactionId);
     const initial = await transactionRef.get();
@@ -511,28 +585,77 @@ export class WalletService {
     if (!initialData || initialData.kind !== TransactionKind.topUp) {
       throw new NotFoundException('Deposit not found.');
     }
+    return this.creditDeposit(transactionRef, initialData, adminId);
+  }
+
+  async confirmPaystackDeposit(reference: string) {
+    const matches = await this.documents
+      .collection('transactions')
+      .where('reference', '==', reference)
+      .limit(1)
+      .get();
+    const initial = matches.docs[0];
+    const initialData = initial?.data();
+    if (
+      !initial ||
+      !initialData ||
+      initialData.kind !== TransactionKind.topUp ||
+      typeof initialData.entityId !== 'string'
+    ) {
+      throw new NotFoundException('Paystack deposit not found.');
+    }
+    const verified =
+      await this.payments.paystackTestProvider.verifyTransaction(reference);
+    if (
+      verified.reference !== reference ||
+      verified.status !== 'success' ||
+      verified.currency !== 'ZAR' ||
+      verified.amountCents !== initialData.amountCents ||
+      verified.transactionId !== initial.id ||
+      verified.entityId !== initialData.entityId
+    ) {
+      throw new BadRequestException(
+        'Paystack payment verification did not match the pending deposit.',
+      );
+    }
+    return this.creditDeposit(initial.ref, initialData);
+  }
+
+  private async creditDeposit(
+    transactionRef: DocumentReference,
+    initialData: DocumentData,
+    adminId?: string,
+  ) {
     const [wallet, clearing] = await Promise.all([
-      this.ledger.ensureWallet(initialData.entityId),
+      this.ledger.ensureWallet(String(initialData.entityId)),
       this.ledger.ensureTypedAccount(LedgerAccountType.platformClearing),
     ]);
-    await this.firestore.runTransaction(async (transaction) => {
+    const notificationRef = this.documents
+      .collection('notifications')
+      .doc(`wallet-credit-${transactionRef.id}`);
+    await this.documents.runTransaction(async (transaction) => {
       const current = await transaction.get(transactionRef);
       const data = current.data();
       if (!data || data.kind !== TransactionKind.topUp) {
         throw new NotFoundException('Deposit not found.');
       }
       if (data.status === TransactionStatus.successful) return;
+      if (data.status !== TransactionStatus.pending) {
+        throw new BadRequestException(
+          'Only pending deposits can be credited to the wallet.',
+        );
+      }
       await this.ledger.postEntries(transaction, [
         {
           accountId: clearing.id,
           amountCents: -BigInt(data.amountCents),
-          transactionId,
+          transactionId: transactionRef.id,
           memo: 'Deposit clearing',
         },
         {
           accountId: wallet.id,
           amountCents: BigInt(data.amountCents),
-          transactionId,
+          transactionId: transactionRef.id,
           memo: 'Deposit credit',
         },
       ]);
@@ -541,12 +664,27 @@ export class WalletService {
         status: TransactionStatus.successful,
         updatedAt: now,
       });
-      transaction.create(this.firestore.collection('auditLogs').doc(), {
-        actorAdminId: adminId,
-        action: 'deposit.confirm',
+      transaction.create(this.documents.collection('auditLogs').doc(), {
+        actorAdminId: adminId ?? null,
+        actor: adminId ? 'admin' : 'paystack',
+        action: adminId ? 'deposit.confirm' : 'deposit.paystack.confirm',
         resource: 'transaction',
-        resourceId: transactionId,
+        resourceId: transactionRef.id,
         createdAt: now,
+      });
+      transaction.create(notificationRef, {
+        userId: data.userId,
+        entityId: data.entityId,
+        title: 'Wallet funded',
+        body: `R${(Number(data.amountCents) / 100).toFixed(2)} has been added to your wallet.`,
+        kind: 'topUp',
+        readAt: null,
+        createdAt: now,
+        payload: {
+          transactionId: transactionRef.id,
+          reference: data.reference,
+          amountCents: data.amountCents,
+        },
       });
     });
     const updated = await transactionRef.get();
@@ -554,10 +692,10 @@ export class WalletService {
   }
 
   async approveWithdrawal(adminId: string, transactionId: string) {
-    const transactionRef = this.firestore
+    const transactionRef = this.documents
       .collection('transactions')
       .doc(transactionId);
-    await this.firestore.runTransaction(async (transaction) => {
+    await this.documents.runTransaction(async (transaction) => {
       const current = await transaction.get(transactionRef);
       const data = current.data();
       if (!data || data.kind !== TransactionKind.withdrawal) {
@@ -569,7 +707,7 @@ export class WalletService {
         status: TransactionStatus.successful,
         updatedAt: now,
       });
-      transaction.create(this.firestore.collection('auditLogs').doc(), {
+      transaction.create(this.documents.collection('auditLogs').doc(), {
         actorAdminId: adminId,
         action: 'withdrawal.approve',
         resource: 'transaction',

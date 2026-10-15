@@ -8,6 +8,7 @@ import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/app/router/route_names.dart';
 import 'package:developify_mobile/core/services/push_notification_service.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
+import 'package:developify_mobile/features/authentication/domain/auth_repository.dart';
 
 class DevelopifyApp extends StatefulWidget {
   const DevelopifyApp({super.key, required this.dependencies, this.router});
@@ -21,6 +22,7 @@ class _DevelopifyAppState extends State<DevelopifyApp> {
   late final GoRouter _router =
       widget.router ?? createAppRouter(widget.dependencies);
   StreamSubscription<PushTarget>? _pushTaps;
+  StreamSubscription<void>? _passwordRecovery;
   String? _externalId;
   @override
   void initState() {
@@ -36,6 +38,21 @@ class _DevelopifyAppState extends State<DevelopifyApp> {
           _router.goNamed(Routes.property, pathParameters: {'id': target.id!});
       }
     });
+    final authRepository = widget.dependencies.container<AuthRepository>();
+    _passwordRecovery = authRepository.passwordRecoveryEvents.listen((_) {
+      _router.goNamed(
+        Routes.recovery,
+        queryParameters: const {'reset': 'true'},
+      );
+    });
+    if (authRepository.passwordRecoveryPending) {
+      scheduleMicrotask(
+        () => _router.goNamed(
+          Routes.recovery,
+          queryParameters: const {'reset': 'true'},
+        ),
+      );
+    }
     widget.dependencies.session.addListener(_syncPushIdentity);
   }
 
@@ -55,6 +72,7 @@ class _DevelopifyAppState extends State<DevelopifyApp> {
     widget.dependencies.session.stopExpiryMonitoring();
     widget.dependencies.session.removeListener(_syncPushIdentity);
     unawaited(_pushTaps?.cancel());
+    unawaited(_passwordRecovery?.cancel());
     if (widget.router == null) _router.dispose();
     super.dispose();
   }

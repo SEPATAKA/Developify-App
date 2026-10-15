@@ -18,12 +18,22 @@ final class PlatformDeviceFilePicker implements DeviceFilePicker {
   }) async {
     late final List<PlatformFile> selection;
     try {
-      selection = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: extensions,
-      );
+      if (allowMultiple) {
+        selection = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: extensions,
+        );
+      } else {
+        final file = await FilePicker.pickFile(
+          type: FileType.custom,
+          allowedExtensions: extensions,
+        );
+        selection = file == null ? const [] : [file];
+      }
     } on UnimplementedError {
-      throw StateError('The local file picker is unavailable on this platform.');
+      throw StateError(
+        'The local file picker is unavailable on this platform.',
+      );
     }
     if (selection.isEmpty) return null;
     final chosen = allowMultiple ? selection : selection.take(1);

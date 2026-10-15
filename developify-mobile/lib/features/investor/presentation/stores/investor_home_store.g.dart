@@ -9,15 +9,6 @@ part of 'investor_home_store.dart';
 // ignore_for_file: non_constant_identifier_names, unnecessary_brace_in_string_interps, unnecessary_lambdas, prefer_expression_function_bodies, lines_longer_than_80_chars, avoid_as, avoid_annotating_with_dynamic, no_leading_underscores_for_local_identifiers
 
 mixin _$InvestorHomeStore on InvestorHomeStoreBase, Store {
-  Computed<PortfolioAnalytics?>? _$portfolioComputed;
-
-  @override
-  PortfolioAnalytics? get portfolio =>
-      (_$portfolioComputed ??= Computed<PortfolioAnalytics?>(
-        () => super.portfolio,
-        name: 'InvestorHomeStoreBase.portfolio',
-      )).value;
-
   late final _$balanceVisibleAtom = Atom(
     name: 'InvestorHomeStoreBase.balanceVisible',
     context: context,
@@ -54,21 +45,39 @@ mixin _$InvestorHomeStore on InvestorHomeStoreBase, Store {
     });
   }
 
-  late final _$dataAtom = Atom(
-    name: 'InvestorHomeStoreBase.data',
+  late final _$balanceStatusAtom = Atom(
+    name: 'InvestorHomeStoreBase.balanceStatus',
     context: context,
   );
 
   @override
-  InvestorAccountSnapshot? get data {
-    _$dataAtom.reportRead();
-    return super.data;
+  LoadStatus get balanceStatus {
+    _$balanceStatusAtom.reportRead();
+    return super.balanceStatus;
   }
 
   @override
-  set data(InvestorAccountSnapshot? value) {
-    _$dataAtom.reportWrite(value, super.data, () {
-      super.data = value;
+  set balanceStatus(LoadStatus value) {
+    _$balanceStatusAtom.reportWrite(value, super.balanceStatus, () {
+      super.balanceStatus = value;
+    });
+  }
+
+  late final _$summaryAtom = Atom(
+    name: 'InvestorHomeStoreBase.summary',
+    context: context,
+  );
+
+  @override
+  InvestorAccountSummary? get summary {
+    _$summaryAtom.reportRead();
+    return super.summary;
+  }
+
+  @override
+  set summary(InvestorAccountSummary? value) {
+    _$summaryAtom.reportWrite(value, super.summary, () {
+      super.summary = value;
     });
   }
 
@@ -168,11 +177,11 @@ mixin _$InvestorHomeStore on InvestorHomeStoreBase, Store {
     return '''
 balanceVisible: ${balanceVisible},
 status: ${status},
-data: ${data},
+balanceStatus: ${balanceStatus},
+summary: ${summary},
 projects: ${projects},
 favourites: ${favourites},
-error: ${error},
-portfolio: ${portfolio}
+error: ${error}
     ''';
   }
 }

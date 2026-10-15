@@ -4,12 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
-import type { DocumentData } from 'firebase-admin/firestore';
+import {
+  DocumentData,
+  SupabaseDataService,
+  QueryDocumentSnapshot,
+} from '../../supabase/supabase-data.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly firebase: FirebaseAdminService) {}
+  constructor(private readonly supabase: SupabaseDataService) {}
 
   private toIso(value: unknown) {
     if (value instanceof Date) return value.toISOString();
@@ -37,7 +40,7 @@ export class NotificationsService {
   }
 
   async list(userId: string) {
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('notifications')
       .where('userId', '==', userId)
       .limit(100)
@@ -53,7 +56,7 @@ export class NotificationsService {
   }
 
   async markRead(userId: string, id: string) {
-    const ref = this.firebase.firestore.collection('notifications').doc(id);
+    const ref = this.supabase.documents.collection('notifications').doc(id);
     const notification = await ref.get();
     if (!notification.exists)
       throw new NotFoundException('Notification not found.');
@@ -65,7 +68,7 @@ export class NotificationsService {
   }
 
   async markAllRead(userId: string) {
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('notifications')
       .where('userId', '==', userId)
       .get();
@@ -73,7 +76,7 @@ export class NotificationsService {
       (notification) => notification.get('readAt') == null,
     );
     for (let index = 0; index < unread.length; index += 450) {
-      const batch = this.firebase.firestore.batch();
+      const batch = this.supabase.documents.batch();
       for (const notification of unread.slice(index, index + 450)) {
         batch.update(notification.ref, { readAt: new Date() });
       }
@@ -83,7 +86,7 @@ export class NotificationsService {
   }
 
   async messages(userId: string) {
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('chatMessages')
       .where('userId', '==', userId)
       .limit(200)
@@ -113,7 +116,7 @@ export class NotificationsService {
       );
     }
     const createdAt = new Date();
-    const message = await this.firebase.firestore
+    const message = await this.supabase.documents
       .collection('chatMessages')
       .add({ userId, text: messageText, fromSupport: false, createdAt });
     return {
@@ -125,7 +128,7 @@ export class NotificationsService {
   }
 
   async chatConversations() {
-    const db = this.firebase.firestore;
+    const db = this.supabase.documents;
     const rows = await db
       .collection('chatMessages')
       .orderBy('createdAt', 'desc')
@@ -133,7 +136,7 @@ export class NotificationsService {
       .get();
     const latestByUser = new Map<
       string,
-      FirebaseFirestore.QueryDocumentSnapshot
+      QueryDocumentSnapshot
     >();
     for (const message of rows.docs) {
       const userId = message.get('userId');
@@ -163,12 +166,12 @@ export class NotificationsService {
   }
 
   async supportMessages(userId: string) {
-    const profile = await this.firebase.firestore
+    const profile = await this.supabase.documents
       .collection('users')
       .doc(userId)
       .get();
     if (!profile.exists) throw new NotFoundException('User profile not found.');
-    const rows = await this.firebase.firestore
+    const rows = await this.supabase.documents
       .collection('chatMessages')
       .where('userId', '==', userId)
       .limit(200)
@@ -197,13 +200,13 @@ export class NotificationsService {
         'Messages must be 2000 characters or fewer.',
       );
     }
-    const user = await this.firebase.firestore
+    const user = await this.supabase.documents
       .collection('users')
       .doc(userId)
       .get();
     if (!user.exists) throw new NotFoundException('User profile not found.');
     const createdAt = new Date();
-    const message = await this.firebase.firestore
+    const message = await this.supabase.documents
       .collection('chatMessages')
       .add({ userId, text: messageText, fromSupport: true, createdAt });
     return {
@@ -225,7 +228,7 @@ export class NotificationsService {
     },
   ) {
     const createdAt = new Date();
-    const installation = await this.firebase.firestore
+    const installation = await this.supabase.documents
       .collection('deviceInstallations')
       .add({
         userId,
@@ -251,7 +254,7 @@ export class NotificationsService {
   }
 
   async bindDevice(userId: string, deviceId: string) {
-    const ref = this.firebase.firestore
+    const ref = this.supabase.documents
       .collection('deviceInstallations')
       .doc(deviceId);
     const installation = await ref.get();
@@ -274,11 +277,11 @@ export class NotificationsService {
     body: string,
     kind = 'updates',
   ) {
-    const users = await this.firebase.firestore.collection('users').get();
+    const users = await this.supabase.documents.collection('users').get();
     for (let index = 0; index < users.docs.length; index += 450) {
-      const batch = this.firebase.firestore.batch();
+      const batch = this.supabase.documents.batch();
       for (const user of users.docs.slice(index, index + 450)) {
-        const notification = this.firebase.firestore
+        const notification = this.supabase.documents
           .collection('notifications')
           .doc();
         batch.create(notification, {
@@ -292,7 +295,7 @@ export class NotificationsService {
       }
       await batch.commit();
     }
-    await this.firebase.firestore.collection('auditLogs').add({
+    await this.supabase.documents.collection('auditLogs').add({
       actorAdminId: adminId,
       action: 'notifications.broadcast',
       resource: 'notification',

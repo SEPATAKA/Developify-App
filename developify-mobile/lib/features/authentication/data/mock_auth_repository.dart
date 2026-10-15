@@ -16,7 +16,19 @@ final class MockAuthRepository implements AuthRepository {
   bool get emailVerificationPending => false;
 
   @override
-  bool get usesFirebaseEmailLink => false;
+  bool get usesEmailVerificationLink => false;
+
+  @override
+  bool get passwordRecoveryPending => false;
+
+  @override
+  String? get recoveryEmail => null;
+
+  @override
+  Stream<void> get passwordRecoveryEvents => const Stream<void>.empty();
+
+  @override
+  void dispose() {}
 
   bool _recoveryRequested = false;
   bool _recoveryVerified = false;

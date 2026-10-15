@@ -51,7 +51,7 @@ Future<void> prepareInvestorProfileFrame(
     );
   }
   if (node == '68499' || node == '68593') {
-    repository.saveSecurityPreferences(
+    await repository.saveSecurityPreferences(
       const SecurityPreferences(twoFactorEnabled: true),
     );
   }

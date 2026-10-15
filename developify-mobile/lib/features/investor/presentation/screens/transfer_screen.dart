@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:developify_mobile/core/assets/app_assets.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
@@ -103,20 +105,24 @@ class _TransferScreenState extends State<TransferScreen> {
           children: [
             SizedBox(height: 18.w),
             Text(
-              store.supportsManualEft
-                  ? 'Add funds by bank transfer'
-                  : 'How will you pay?',
+              store.cardPaymentsEnabled
+                  ? 'Choose how to add funds'
+                  : 'Add funds by bank transfer',
               style: AppTextStyles.heading,
             ),
             SizedBox(height: 17.w),
             Text(
-              store.supportsManualEft
+              store.cardPaymentsEnabled
+                  ? store.supportsManualEft
+                        ? 'Pay by card in Paystack’s secure test checkout, or request a manual bank transfer. Your wallet is credited only after payment is confirmed.'
+                        : 'Pay by card or try a demo bank transfer. Demo transactions do not move real money.'
+                  : store.supportsManualEft
                   ? 'Create a deposit request, then transfer the exact amount using the reference provided. Funds are added after admin confirmation.'
-                  : 'Easily add funds to your account and keep your balance ready for everyday transactions.',
+                  : 'Add funds by bank transfer.',
               style: AppTextStyles.body,
             ),
             SizedBox(height: 18.w),
-            if (!store.supportsManualEft)
+            if (store.cardPaymentsEnabled)
               InvestorMenuRow(
                 icon: AppAssets.investorTransferCard,
                 radius: 12,
@@ -145,30 +151,32 @@ class _TransferScreenState extends State<TransferScreen> {
                     ),
                   ),
                 ),
-                subtitle: 'Instant • 1.5% fee',
+                subtitle: 'Paystack secure checkout • Test mode',
                 trailing: const AppIcon(AppAssets.profileMenuChevron),
                 onTap: () => store.chooseKind(PaymentMethodKind.card),
               ),
-            if (!store.supportsManualEft) SizedBox(height: 19.w),
-            InvestorMenuRow(
-              icon: AppAssets.investorBank,
-              iconGap: 16,
-              radius: 12,
-              padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 16.w),
-              subtitleGap: 4,
-              title: 'Bank Transfer',
-              titleSize: 16,
-              subtitleSize: 14,
-              subtitleColor: AppColors.iconMuted,
-              subtitleWeight: FontWeight.w500,
-              subtitle: store.supportsManualEft
-                  ? 'Manual EFT • Pending admin confirmation'
-                  : 'Instant • No Fee',
-              trailing: const AppIcon(AppAssets.profileMenuChevron),
-              onTap: store.supportsManualEft
-                  ? () => store.chooseKind(PaymentMethodKind.bankAccount)
-                  : store.showBankDetails,
-            ),
+            if (store.bankTransferAvailable) ...[
+              if (store.cardPaymentsEnabled) SizedBox(height: 19.w),
+              InvestorMenuRow(
+                icon: AppAssets.investorBank,
+                iconGap: 16,
+                radius: 12,
+                padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 16.w),
+                subtitleGap: 4,
+                title: 'Bank Transfer',
+                titleSize: 16,
+                subtitleSize: 14,
+                subtitleColor: AppColors.iconMuted,
+                subtitleWeight: FontWeight.w500,
+                subtitle: store.supportsManualEft
+                    ? 'Manual EFT • Pending admin confirmation'
+                    : 'Demo bank transfer • Simulated',
+                trailing: const AppIcon(AppAssets.profileMenuChevron),
+                onTap: () => store.supportsManualEft
+                    ? store.chooseKind(PaymentMethodKind.bankAccount)
+                    : store.showBankDetails(),
+              ),
+            ],
           ],
         ),
       );
@@ -196,6 +204,8 @@ class _TransferScreenState extends State<TransferScreen> {
         !withdrawal && method?.kind == PaymentMethodKind.bankAccount;
     final methodTitle = method == null
         ? 'No payment method'
+        : method.lastFour.isEmpty
+        ? method.name
         : '${method.name} • ****** ${method.lastFour}';
     return InvestorPage(
       footerBottomInset: withdrawal ? 9 : 18,
@@ -347,6 +357,11 @@ class _TransferScreenState extends State<TransferScreen> {
   }
 
   Future<void> _addMethod() async {
+    if (widget.store.kind == InvestorTransferKind.topUp &&
+        widget.store.cardPaymentsEnabled) {
+      widget.store.selectMethod(InvestorDepositAccount.paystackMethod.id);
+      return;
+    }
     final id = await context.pushNamed<String>(
       widget.store.kind == InvestorTransferKind.withdrawal
           ? InvestorRoutes.addBank
@@ -375,8 +390,12 @@ class _TransferScreenState extends State<TransferScreen> {
           ? store.supportsManualEft
                 ? 'Please wait while we submit your withdrawal for admin approval.'
                 : 'Please wait while we record this simulated withdrawal.'
-          : store.supportsManualEft
+          : store.supportsManualEft &&
+                store.method?.kind == PaymentMethodKind.bankAccount
           ? 'Please wait while we create your manual EFT deposit request.'
+          : store.cardPaymentsEnabled &&
+                store.method?.kind == PaymentMethodKind.card
+          ? 'Please wait while we prepare your secure Paystack test checkout.'
           : 'Please wait while we confirm this simulation.',
       processingBottomSpacing: withdrawal ? 106 : 39,
       allowDemoBiometricAuthorization: store.allowDemoBiometricAuthorization,
@@ -398,8 +417,18 @@ class _TransferScreenState extends State<TransferScreen> {
     final receiptId = store.receipt?.transactionId;
     final receipt = store.receipt;
     final instructions = receipt?.paymentInstructions;
+    final checkoutUrl = receipt?.checkoutUrl;
+    var checkoutOpened = false;
+    if (success && checkoutUrl != null) {
+      checkoutOpened = await _openCheckout(checkoutUrl);
+      if (!mounted) return;
+    }
     final isPending = receipt?.status == InvestorTransactionStatus.pending;
-    final liveManualDeposit = !withdrawal && store.supportsManualEft;
+    final paystackDeposit = !withdrawal && checkoutUrl != null;
+    final liveManualDeposit =
+        !withdrawal &&
+        destination?.kind == PaymentMethodKind.bankAccount &&
+        store.supportsManualEft;
     final manualDepositAmount = instructions == null
         ? null
         : MonetaryAmount(instructions.amountCents, Currency.zar);
@@ -415,6 +444,10 @@ class _TransferScreenState extends State<TransferScreen> {
         ? 'Deposit request pending. Transfer ${Money.amount(manualDepositAmount!)} to ${instructions.bank}, account ${instructions.accountNumber}, branch ${instructions.branchCode}. Use reference ${instructions.reference}. Your wallet is credited after admin confirmation.'
         : liveManualDeposit && isPending
         ? 'This deposit request is still pending. Check the transaction details or contact support for its bank-transfer reference before sending funds.'
+        : paystackDeposit
+        ? checkoutOpened
+              ? 'Complete your card payment in Paystack’s secure test checkout. Your wallet is credited only after Paystack confirms the payment.'
+              : 'The payment request is pending, but Paystack checkout did not open. Return to Wallet and try the pending payment again.'
         : liveManualDeposit
         ? 'Deposit confirmed. Your wallet has been credited.'
         : '${Money.amount(store.amount!)} added to your demo wallet.';
@@ -433,6 +466,8 @@ class _TransferScreenState extends State<TransferScreen> {
                       : 'Withdrawal Sent'
                 : liveManualDeposit
                 ? 'Deposit Request Pending'
+                : paystackDeposit
+                ? 'Card Payment Pending'
                 : 'Top - up Successful'
           : 'Couldn’t complete',
       message: message,
@@ -440,6 +475,8 @@ class _TransferScreenState extends State<TransferScreen> {
           ? withdrawal
                 ? 'Back to Wallet'
                 : liveManualDeposit
+                ? 'Back to Wallet'
+                : paystackDeposit
                 ? 'Back to Wallet'
                 : widget.returnProjectId != null
                 ? 'Return to investment'
@@ -452,11 +489,24 @@ class _TransferScreenState extends State<TransferScreen> {
                       : 'View Receipt'
                 : liveManualDeposit
                 ? 'View Request'
+                : paystackDeposit
+                ? 'Open Checkout'
                 : 'Back to Wallet'
           : null,
     );
     if (!mounted) return;
     if (success) {
+      if (paystackDeposit && choice == 'secondary') {
+        final opened = await _openCheckout(checkoutUrl);
+        if (!mounted) return;
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to open the secure Paystack checkout.'),
+            ),
+          );
+        }
+      }
       if ((withdrawal || liveManualDeposit) &&
           choice == 'secondary' &&
           receiptId != null) {
@@ -487,6 +537,17 @@ class _TransferScreenState extends State<TransferScreen> {
       );
     } else {
       store.adjustAmount();
+    }
+  }
+
+  Future<bool> _openCheckout(String checkoutUrl) async {
+    try {
+      return await launchUrl(
+        Uri.parse(checkoutUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } on PlatformException {
+      return false;
     }
   }
 }

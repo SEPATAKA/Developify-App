@@ -1,16 +1,16 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/v1/auth/firebase/session": {
+    "/v1/auth/supabase/session": {
       "post": {
-        "operationId": "AuthController_firebaseSession",
+        "operationId": "AuthController_supabaseSession",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FirebaseIdTokenDto"
+                "$ref": "#/components/schemas/SupabaseAuthTokenDto"
               }
             }
           }
@@ -25,16 +25,16 @@
         ]
       }
     },
-    "/v1/auth/admin/firebase-session": {
+    "/v1/auth/admin/supabase-session": {
       "post": {
-        "operationId": "AuthController_firebaseAdminSession",
+        "operationId": "AuthController_supabaseAdminSession",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FirebaseIdTokenDto"
+                "$ref": "#/components/schemas/SupabaseAuthTokenDto"
               }
             }
           }
@@ -83,78 +83,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InvestorCompleteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Auth"
-        ]
-      }
-    },
-    "/v1/auth/recovery/request": {
-      "post": {
-        "operationId": "AuthController_requestRecovery",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RecoveryRequestDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Auth"
-        ]
-      }
-    },
-    "/v1/auth/recovery/verify": {
-      "post": {
-        "operationId": "AuthController_verifyRecovery",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RecoveryVerifyDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Auth"
-        ]
-      }
-    },
-    "/v1/auth/recovery/reset": {
-      "post": {
-        "operationId": "AuthController_resetPassword",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordDto"
               }
             }
           }
@@ -396,6 +324,66 @@
         },
         "tags": [
           "Catalog"
+        ]
+      }
+    },
+    "/v1/wallet/paystack/webhook": {
+      "post": {
+        "operationId": "WalletController_paystackWebhook",
+        "parameters": [
+          {
+            "name": "x-paystack-signature",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/v1/wallet/paystack/callback": {
+      "get": {
+        "operationId": "WalletController_paystackCallback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/v1/wallet/balance": {
+      "get": {
+        "operationId": "WalletController_balance",
+        "parameters": [
+          {
+            "name": "entity",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Wallet"
         ]
       }
     },
@@ -747,6 +735,27 @@
         "tags": [
           "Kyc"
         ]
+      },
+      "delete": {
+        "operationId": "KycController_deleteDocument",
+        "parameters": [
+          {
+            "name": "entity",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Kyc"
+        ]
       }
     },
     "/v1/kyc/{entity}/members": {
@@ -964,6 +973,60 @@
         ]
       }
     },
+    "/v1/landowner/drafts/{draftKey}/documents": {
+      "post": {
+        "operationId": "LandownerController_addDraftDocument",
+        "parameters": [
+          {
+            "name": "draftKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Landowner"
+        ]
+      }
+    },
+    "/v1/landowner/drafts/{draftKey}/documents/{key}": {
+      "delete": {
+        "operationId": "LandownerController_removeDraftDocument",
+        "parameters": [
+          {
+            "name": "draftKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Landowner"
+        ]
+      }
+    },
     "/v1/landowner/submit": {
       "post": {
         "operationId": "LandownerController_submit",
@@ -1143,6 +1206,64 @@
         ]
       }
     },
+    "/v1/admin/notifications/chat/conversations": {
+      "get": {
+        "operationId": "AdminNotificationsController_conversations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminNotifications"
+        ]
+      }
+    },
+    "/v1/admin/notifications/chat/{userId}/messages": {
+      "get": {
+        "operationId": "AdminNotificationsController_messages",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminNotifications"
+        ]
+      },
+      "post": {
+        "operationId": "AdminNotificationsController_reply",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminNotifications"
+        ]
+      }
+    },
     "/v1/admin/notifications/broadcast": {
       "post": {
         "operationId": "AdminNotificationsController_broadcast",
@@ -1154,6 +1275,32 @@
         },
         "tags": [
           "AdminNotifications"
+        ]
+      }
+    },
+    "/v1/documents/upload": {
+      "post": {
+        "operationId": "DocumentsController_upload",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      },
+      "delete": {
+        "operationId": "DocumentsController_deleteUpload",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
         ]
       }
     },
@@ -1439,7 +1586,7 @@
       }
     },
     "schemas": {
-      "FirebaseIdTokenDto": {
+      "SupabaseAuthTokenDto": {
         "type": "object",
         "properties": {}
       },
@@ -1448,18 +1595,6 @@
         "properties": {}
       },
       "InvestorCompleteDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "RecoveryRequestDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "RecoveryVerifyDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "ResetPasswordDto": {
         "type": "object",
         "properties": {}
       },

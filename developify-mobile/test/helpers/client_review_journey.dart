@@ -7,7 +7,6 @@ import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
 import 'package:developify_mobile/core/widgets/app_button.dart';
 import 'package:developify_mobile/features/investor/data/mock_investor_catalog_repository.dart';
-import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investment_policy.dart';
 import 'package:developify_mobile/features/investor/domain/investor_repository.dart';
 import 'package:developify_mobile/features/investor/presentation/screens/investment_screen.dart';
@@ -151,7 +150,7 @@ void registerClientReviewJourney({
       var home = tester
           .widget<InvestorHomeScreen>(find.byType(InvestorHomeScreen))
           .store;
-      final originalSummary = InvestorAccountSummary.from(home.data!);
+      final originalSummary = home.summary!;
       await shot('02-home-zar');
       await tap(find.bySemanticsLabel('Save Marula Heights'));
       expect(router.state.uri.path, '/investor/home');
@@ -274,12 +273,12 @@ void registerClientReviewJourney({
           .widget<InvestorHomeScreen>(find.byType(InvestorHomeScreen))
           .store;
       expect(
-        InvestorAccountSummary.from(home.data!).overallBalance,
+        home.summary!.overallBalance,
         originalSummary.overallBalance +
             const MonetaryAmount(2600000, Currency.zar),
       );
       expect(
-        InvestorAccountSummary.from(home.data!).investedCapital,
+        home.summary!.investedCapital,
         originalSummary.investedCapital +
             const MonetaryAmount(2600000, Currency.zar),
       );

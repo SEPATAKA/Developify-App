@@ -1,16 +1,17 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 abstract interface class AuthTokenProvider {
   Future<String?> readToken();
 }
 
-final class FirebaseAuthTokenProvider implements AuthTokenProvider {
-  FirebaseAuthTokenProvider(this._auth);
-  final FirebaseAuth _auth;
+final class SupabaseAuthTokenProvider implements AuthTokenProvider {
+  SupabaseAuthTokenProvider(this._client);
+  final SupabaseClient _client;
 
   @override
-  Future<String?> readToken() async => _auth.currentUser?.getIdToken();
+  Future<String?> readToken() async =>
+      _client.auth.currentSession?.accessToken;
 }
 
 abstract interface class TokenStorage implements AuthTokenProvider {

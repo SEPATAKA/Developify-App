@@ -75,7 +75,8 @@ final class ApiLandownerRepository implements LandownerRepository {
         return LandownerOverview(
           properties: properties,
           earnedCents: (map['earnedCents'] as num?)?.toInt() ?? 0,
-          propertyCount: (map['propertyCount'] as num?)?.toInt() ?? properties.length,
+          propertyCount:
+              (map['propertyCount'] as num?)?.toInt() ?? properties.length,
           approvedCount: (map['approvedCount'] as num?)?.toInt() ?? 0,
           nextPayoutCents: (map['nextPayoutCents'] as num?)?.toInt() ?? 0,
         );
@@ -179,10 +180,12 @@ final class ApiLandownerRepository implements LandownerRepository {
     String key,
     PickedLocalFile file,
   ) async {
-    final uploaded = await _uploader.upload(
-      file,
-      prefix: 'landowner/$draftId',
+    final draft = await _persistDraft(
+      _drafts[draftId] ?? SubmissionDraft(id: draftId),
     );
+    if (draft case Failure(:final error)) return Failure(error);
+
+    final uploaded = await _uploader.upload(file, prefix: 'landowner/$draftId');
     if (uploaded case Failure(:final error)) return Failure(error);
     final storageKey = (uploaded as Success<String>).value;
     final saved = await _client.request<Object?>(

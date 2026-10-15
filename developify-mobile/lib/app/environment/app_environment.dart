@@ -23,7 +23,8 @@ final class AppEnvironment {
     this.mockDelay = const Duration(milliseconds: 350),
     this.mockScenario = MockScenario.success,
     this.oneSignalAppId = '',
-    this.firebaseEnabled = false,
+    this.supabaseUrl = 'https://jbrpleyrkdgnrmfakdyk.supabase.co',
+    this.supabaseAnonKey = '',
     this.telemetryEnabled = false,
   });
 
@@ -56,7 +57,14 @@ final class AppEnvironment {
         _ => MockScenario.success,
       },
       oneSignalAppId: const String.fromEnvironment('ONESIGNAL_APP_ID'),
-      firebaseEnabled: const bool.fromEnvironment('FIREBASE_ENABLED'),
+      supabaseUrl: const String.fromEnvironment(
+        'SUPABASE_URL',
+        defaultValue: 'https://jbrpleyrkdgnrmfakdyk.supabase.co',
+      ),
+      supabaseAnonKey: const String.fromEnvironment(
+        'SUPABASE_ANON_KEY',
+        defaultValue: 'sb_publishable_qJDyIefA2HfQINPaCHNl9Q_ZeTzcXPg',
+      ),
       telemetryEnabled: const bool.fromEnvironment('TELEMETRY_ENABLED'),
     );
   }
@@ -66,8 +74,11 @@ final class AppEnvironment {
   final Duration mockDelay;
   final MockScenario mockScenario;
   final String oneSignalAppId;
-  final bool firebaseEnabled;
+  final String supabaseUrl;
+  final String supabaseAnonKey;
   final bool telemetryEnabled;
+  bool get supabaseEnabled =>
+      supabaseUrl.startsWith('https://') && supabaseAnonKey.trim().isNotEmpty;
 
   Uri? get apiUri {
     final uri = Uri.tryParse(apiBaseUrl.trim());

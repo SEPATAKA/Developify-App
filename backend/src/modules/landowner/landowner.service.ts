@@ -4,17 +4,20 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PropertyStatus } from '../../firebase/domain.enums';
+import { PropertyStatus } from '../../supabase/domain.enums';
 import { randomUUID } from 'node:crypto';
-import type { DocumentData } from 'firebase-admin/firestore';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import {
+  DocumentData,
+  SupabaseDataService,
+  QueryDocumentSnapshot,
+} from '../../supabase/supabase-data.service';
 
 @Injectable()
 export class LandownerService {
-  constructor(private readonly firebase: FirebaseAdminService) {}
+  constructor(private readonly supabase: SupabaseDataService) {}
 
-  private get firestore() {
-    return this.firebase.firestore;
+  private get documents() {
+    return this.supabase.documents;
   }
 
   private mapProperty(id: string, property: DocumentData) {
@@ -64,7 +67,7 @@ export class LandownerService {
   }
 
   async overview(userId: string) {
-    const properties = await this.firestore
+    const properties = await this.documents
       .collection('properties')
       .where('ownerId', '==', userId)
       .limit(200)
@@ -72,7 +75,7 @@ export class LandownerService {
     const payouts = (
       await Promise.all(
         properties.docs.map((property) =>
-          this.firestore
+          this.documents
             .collection('landownerPayouts')
             .where('propertyId', '==', property.id)
             .get(),
@@ -98,7 +101,7 @@ export class LandownerService {
   }
 
   async properties(userId: string) {
-    const rows = await this.firestore
+    const rows = await this.documents
       .collection('properties')
       .where('ownerId', '==', userId)
       .limit(200)
@@ -109,7 +112,7 @@ export class LandownerService {
   }
 
   async property(userId: string, id: string) {
-    const property = await this.firestore
+    const property = await this.documents
       .collection('properties')
       .doc(id)
       .get();
@@ -120,7 +123,7 @@ export class LandownerService {
   }
 
   async earnings(userId: string) {
-    const properties = await this.firestore
+    const properties = await this.documents
       .collection('properties')
       .where('ownerId', '==', userId)
       .limit(200)
@@ -128,7 +131,7 @@ export class LandownerService {
     const payouts = (
       await Promise.all(
         properties.docs.map((property) =>
-          this.firestore
+          this.documents
             .collection('landownerPayouts')
             .where('propertyId', '==', property.id)
             .get(),
@@ -167,14 +170,14 @@ export class LandownerService {
   }
 
   async readDraft(userId: string, draftKey: string) {
-    const draft = await this.firestore
+    const draft = await this.documents
       .collection('submissionDrafts')
       .doc(this.draftId(userId, draftKey))
       .get();
     if (!draft.exists) {
       return { id: draftKey, step: 1, payload: {}, documents: [] };
     }
-    const documents = await this.firestore
+    const documents = await this.documents
       .collection('documents')
       .where('submissionId', '==', draft.id)
       .get();
@@ -202,7 +205,7 @@ export class LandownerService {
     if (!Number.isSafeInteger(step) || step < 1) {
       throw new BadRequestException('Draft step must be a positive integer.');
     }
-    const reference = this.firestore
+    const reference = this.documents
       .collection('submissionDrafts')
       .doc(this.draftId(userId, draftKey));
     const existing = await reference.get();
@@ -233,7 +236,7 @@ export class LandownerService {
     },
   ) {
     const submissionId = this.draftId(userId, draftKey);
-    const draft = await this.firestore
+    const draft = await this.documents
       .collection('submissionDrafts')
       .doc(submissionId)
       .get();
@@ -251,13 +254,8 @@ export class LandownerService {
     ) {
       throw new BadRequestException('Document metadata is invalid.');
     }
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured for property uploads.',
-      );
-    }
-    const uploadedFile = this.firebase.storage
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
+    const uploadedFile = this.supabase.storage
       .bucket(bucketName)
       .file(data.storageKey);
     const [fileMetadata] = await uploadedFile.getMetadata();
@@ -268,7 +266,7 @@ export class LandownerService {
     ) {
       throw new BadRequestException('The uploaded property file could not be verified.');
     }
-    const sameKeySnapshot = await this.firestore
+    const sameKeySnapshot = await this.documents
       .collection('documents')
       .where('submissionId', '==', submissionId)
       .get();
@@ -277,9 +275,9 @@ export class LandownerService {
         document.get('ownerId') === userId &&
         document.get('key') === data.key,
     );
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     for (const previous of sameKey) batch.delete(previous.ref);
-    const reference = this.firestore.collection('documents').doc();
+    const reference = this.documents.collection('documents').doc();
     batch.create(reference, {
       submissionId,
       ownerId: userId,
@@ -298,14 +296,14 @@ export class LandownerService {
 
   async removeDraftDocument(userId: string, draftKey: string, key: string) {
     const submissionId = this.draftId(userId, draftKey);
-    const draft = await this.firestore
+    const draft = await this.documents
       .collection('submissionDrafts')
       .doc(submissionId)
       .get();
     if (!draft.exists || draft.get('ownerId') !== userId) {
       throw new NotFoundException('Submission draft not found.');
     }
-    const documentSnapshot = await this.firestore
+    const documentSnapshot = await this.documents
       .collection('documents')
       .where('submissionId', '==', submissionId)
       .get();
@@ -314,27 +312,22 @@ export class LandownerService {
         document.get('ownerId') === userId && document.get('key') === key,
     );
     await this.deleteStoredFiles(documents);
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     for (const document of documents) batch.delete(document.ref);
     await batch.commit();
     return { ok: true };
   }
 
   private async deleteStoredFiles(
-    documents: FirebaseFirestore.QueryDocumentSnapshot[],
+    documents: QueryDocumentSnapshot[],
   ) {
     const keys = documents
       .map((document) => document.get('storageKey'))
       .filter((key): key is string => typeof key === 'string' && key.length > 0);
     if (keys.length === 0) return;
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new ServiceUnavailableException(
-        'FIREBASE_STORAGE_BUCKET must be configured to remove uploaded files.',
-      );
-    }
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET ?? 'developify-private';
     for (const key of keys) {
-      await this.firebase.storage
+      await this.supabase.storage
         .bucket(bucketName)
         .file(key)
         .delete({ ignoreNotFound: true });
@@ -342,12 +335,12 @@ export class LandownerService {
   }
 
   async submit(userId: string, draftKey: string) {
-    const draft = await this.firestore
+    const draft = await this.documents
       .collection('submissionDrafts')
       .doc(this.draftId(userId, draftKey))
       .get();
     const payload = (draft.get('payload') ?? {}) as Record<string, unknown>;
-    const documents = await this.firestore
+    const documents = await this.documents
       .collection('documents')
       .where('submissionId', '==', this.draftId(userId, draftKey))
       .get();
@@ -385,7 +378,7 @@ export class LandownerService {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await this.firestore
+    await this.documents
       .collection('properties')
       .doc(propertyId)
       .create(property);
@@ -397,19 +390,19 @@ export class LandownerService {
     propertyId: string,
     status: PropertyStatus,
   ) {
-    const propertyRef = this.firestore.collection('properties').doc(propertyId);
+    const propertyRef = this.documents.collection('properties').doc(propertyId);
     const propertySnapshot = await propertyRef.get();
     if (!propertySnapshot.exists) {
       throw new NotFoundException('Property not found.');
     }
     const property = propertySnapshot.data()!;
     const now = new Date();
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     batch.update(propertyRef, { status, updatedAt: now });
     let projectId: string | null = null;
     if (status === PropertyStatus.live) {
       projectId = `property-${propertyId}`;
-      const projectRef = this.firestore.collection('projects').doc(projectId);
+      const projectRef = this.documents.collection('projects').doc(projectId);
       const existingProject = await projectRef.get();
       if (!existingProject.exists) {
         batch.create(projectRef, {
@@ -433,7 +426,7 @@ export class LandownerService {
         });
       }
     }
-    const audit = this.firestore.collection('auditLogs').doc();
+    const audit = this.documents.collection('auditLogs').doc();
     batch.create(audit, {
       actorAdminId: adminId,
       action: `property.${status}`,
@@ -465,7 +458,7 @@ export class LandownerService {
         'Enter the owner email or seven-digit investor ID.',
       );
     }
-    const users = this.firestore.collection('users');
+    const users = this.documents.collection('users');
     const ownerQuery = investorNumber
       ? users.where('investorNumber', '==', investorNumber).limit(1)
       : users.where('email', '==', email).limit(1);
@@ -496,12 +489,12 @@ export class LandownerService {
       createdAt: now,
       updatedAt: now,
     };
-    const batch = this.firestore.batch();
+    const batch = this.documents.batch();
     batch.create(
-      this.firestore.collection('properties').doc(propertyId),
+      this.documents.collection('properties').doc(propertyId),
       property,
     );
-    batch.create(this.firestore.collection('auditLogs').doc(), {
+    batch.create(this.documents.collection('auditLogs').doc(), {
       actorAdminId: adminId,
       action: 'property.create',
       resource: 'property',
@@ -520,13 +513,13 @@ export class LandownerService {
   }
 
   async adminList() {
-    const properties = await this.firestore
+    const properties = await this.documents
       .collection('properties')
       .limit(500)
       .get();
     const rows = await Promise.all(
       properties.docs.map(async (property) => {
-        const owner = await this.firestore
+        const owner = await this.documents
           .collection('users')
           .doc(String(property.get('ownerId') ?? ''))
           .get();

@@ -10,9 +10,13 @@ import {
   Put,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { ProjectStatus, PropertyStatus } from '../../firebase/domain.enums';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
-import { firestoreDate } from '../../firebase/firestore-date';
+import { ProjectStatus, PropertyStatus } from '../../supabase/domain.enums';
+import {
+  DocumentQuery,
+  SupabaseDataService,
+  type DocumentData,
+} from '../../supabase/supabase-data.service';
+import { documentDate } from '../../supabase/document-date';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.decorators';
 import { InvestmentsService } from '../investments/investments.service';
 import { KycService } from '../kyc/kyc.service';
@@ -26,14 +30,14 @@ export class AdminController {
     private readonly landowner: LandownerService,
     private readonly kyc: KycService,
     private readonly investments: InvestmentsService,
-    private readonly firebase: FirebaseAdminService,
+    private readonly supabase: SupabaseDataService,
   ) {}
 
   @Roles('admin', 'ops', 'compliance')
   @Get('dashboard')
   async dashboard() {
-    const db = this.firebase.firestore;
-    const count = async (query: FirebaseFirestore.Query) =>
+    const db = this.supabase.documents;
+    const count = async (query: DocumentQuery) =>
       (await query.count().get()).data().count;
     const [
       users,
@@ -73,7 +77,7 @@ export class AdminController {
   @Roles('admin', 'ops', 'compliance')
   @Get('users')
   users() {
-    return this.firebase.listUserProfiles();
+    return this.supabase.listUserProfiles();
   }
 
   @Roles('admin')
@@ -83,7 +87,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() body: { locked: boolean },
   ) {
-    const user = await this.firebase.setUserLocked(id, body.locked, admin.id);
+    const user = await this.supabase.setUserLocked(id, body.locked, admin.id);
     if (!user) throw new NotFoundException('User profile not found.');
     return user;
   }
@@ -91,13 +95,13 @@ export class AdminController {
   @Roles('admin', 'ops')
   @Get('transactions')
   async transactions() {
-    const snapshot = await this.firebase.firestore
+    const snapshot = await this.supabase.documents
       .collection('transactions')
       .orderBy('createdAt', 'desc')
       .limit(200)
       .get();
-    const rows: FirebaseFirestore.DocumentData[] = snapshot.docs.map(
-      (doc): FirebaseFirestore.DocumentData => ({
+    const rows: DocumentData[] = snapshot.docs.map(
+      (doc): DocumentData => ({
         ...doc.data(),
         id: doc.id,
       }),
@@ -105,20 +109,20 @@ export class AdminController {
     return Promise.all(
       rows.map(async (transaction) => {
         const entity = transaction.entityId
-          ? await this.firebase.firestore
+          ? await this.supabase.documents
               .collection('investorEntities')
               .doc(transaction.entityId)
               .get()
           : null;
         const userId = entity?.get('userId');
         const user = userId
-          ? await this.firebase.firestore.collection('users').doc(userId).get()
+          ? await this.supabase.documents.collection('users').doc(userId).get()
           : null;
         return {
           ...transaction,
           amountCents: Number(transaction.amountCents),
           feeCents: Number(transaction.feeCents ?? 0),
-          createdAt: firestoreDate(transaction.createdAt),
+          createdAt: documentDate(transaction.createdAt),
           entity: entity?.exists
             ? { ...entity.data(), user: user?.data() ?? null }
             : null,
@@ -130,11 +134,11 @@ export class AdminController {
   @Roles('admin', 'ops')
   @Get('projects')
   async projects() {
-    const snapshot = await this.firebase.firestore
+    const snapshot = await this.supabase.documents
       .collection('projects')
       .orderBy('createdAt', 'desc')
       .get();
-    const projects: FirebaseFirestore.DocumentData[] = snapshot.docs.map(
+    const projects: DocumentData[] = snapshot.docs.map(
       (doc) => ({ id: doc.id, ...doc.data() }),
     );
     return projects.map((project) => ({
@@ -175,7 +179,7 @@ export class AdminController {
     ) {
       throw new BadRequestException('Project details are invalid.');
     }
-    const db = this.firebase.firestore;
+    const db = this.supabase.documents;
     const slug = body.slug.trim();
     const duplicate = await db
       .collection('projects')
@@ -228,7 +232,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
   ) {
-    const projectRef = this.firebase.firestore.collection('projects').doc(id);
+    const projectRef = this.supabase.documents.collection('projects').doc(id);
     if (!(await projectRef.get()).exists) {
       throw new NotFoundException('Project not found.');
     }
@@ -268,7 +272,7 @@ export class AdminController {
   @Roles('admin', 'ops', 'compliance')
   @Get('audit-logs')
   async auditLogs() {
-    const snapshot = await this.firebase.firestore
+    const snapshot = await this.supabase.documents
       .collection('auditLogs')
       .orderBy('createdAt', 'desc')
       .limit(200)
@@ -279,7 +283,7 @@ export class AdminController {
   @Roles('admin')
   @Get('config')
   async config() {
-    const snapshot = await this.firebase.firestore
+    const snapshot = await this.supabase.documents
       .collection('systemConfig')
       .get();
     return snapshot.docs.map((doc) => ({ key: doc.id, ...doc.data() }));
@@ -291,7 +295,7 @@ export class AdminController {
     if (!key || key.includes('/')) {
       throw new BadRequestException('Configuration key is invalid.');
     }
-    const reference = this.firebase.firestore
+    const reference = this.supabase.documents
       .collection('systemConfig')
       .doc(key);
     await reference.set(

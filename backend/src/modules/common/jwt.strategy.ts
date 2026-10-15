@@ -2,12 +2,12 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-custom';
 import type { Request } from 'express';
-import { FirebaseAdminService } from '../../firebase/firebase-admin.service';
+import { SupabaseDataService } from '../../supabase/supabase-data.service';
 import { AuthUser } from './auth.decorators';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(private readonly firebase: FirebaseAdminService) {
+  constructor(private readonly supabase: SupabaseDataService) {
     super();
   }
 
@@ -22,33 +22,33 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Authentication required.');
     }
 
-    const identity = await this.firebase.verifyIdToken(token);
+    const identity = await this.supabase.verifyIdToken(token);
 
     const email = identity.email?.toLowerCase().trim();
     if (!email || identity.email_verified !== true) {
-      throw new UnauthorizedException('Verified Firebase email required.');
+      throw new UnauthorizedException('Verified Supabase email required.');
     }
 
-    const userProfile = await this.firebase.findProfileByEmail('users', email);
+    const userProfile = await this.supabase.findProfileByEmail('users', email);
     if (
-      userProfile?.get('firebaseUid') === identity.uid &&
+      userProfile?.get('supabaseUid') === identity.uid &&
       userProfile.get('locked') !== true
     ) {
       return {
         id: userProfile.id,
         email,
         type: 'user',
-        firebaseUid: identity.uid,
+        supabaseUid: identity.uid,
       };
     }
 
-    const adminProfile = await this.firebase.findProfileByEmail(
+    const adminProfile = await this.supabase.findProfileByEmail(
       'adminUsers',
       email,
     );
     const role = adminProfile?.get('role');
     if (
-      adminProfile?.get('firebaseUid') === identity.uid &&
+      adminProfile?.get('supabaseUid') === identity.uid &&
       adminProfile.get('locked') !== true &&
       typeof role === 'string' &&
       ['admin', 'ops', 'compliance'].includes(role)
@@ -58,7 +58,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         email,
         type: 'admin',
         role,
-        firebaseUid: identity.uid,
+        supabaseUid: identity.uid,
       };
     }
 

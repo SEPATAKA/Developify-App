@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:developify_mobile/app/di/app_dependencies.dart';
-import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/app_transition_page.dart';
 import 'package:developify_mobile/app/router/route_names.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
@@ -329,7 +328,6 @@ List<RouteBase> investorAuthenticatedRoutes(
                 store: store,
                 onLogout: onLogout,
                 session: dependencies.session,
-                firebaseIdentity: get<AppEnvironment>().firebaseEnabled,
               ),
               initialize: (store, _) => store.load(),
               tab: true,

@@ -129,10 +129,7 @@ final class ApiProfileRepository implements ProfileRepository {
         const {};
     final defaults = const ProfilePreferences();
     _preferences = ProfilePreferences(
-      channels: {
-        ...defaults.channels,
-        ..._boolMap(preferences['channels']),
-      },
+      channels: {...defaults.channels, ..._boolMap(preferences['channels'])},
       topics: {...defaults.topics, ..._boolMap(preferences['topics'])},
       language: preferences['language'] as String? ?? defaults.language,
     );
@@ -151,8 +148,7 @@ final class ApiProfileRepository implements ProfileRepository {
           );
 
     final security =
-        (securityResult as Success<Object?>).value
-            as Map<String, Object?>? ??
+        (securityResult as Success<Object?>).value as Map<String, Object?>? ??
         const {};
     _security = SecurityPreferences(
       biometrics: {
@@ -197,6 +193,15 @@ final class ApiProfileRepository implements ProfileRepository {
       decode: _mapUser,
     );
   }
+
+  @override
+  Future<Result<AppUser>> updateProfilePhoto(String storageKey) =>
+      _client.request(
+        path: '/v1/users/me',
+        method: 'PATCH',
+        data: {'profilePhotoKey': storageKey},
+        decode: _mapUser,
+      );
 
   @override
   PayoutAccount? get payoutAccount => _payout;

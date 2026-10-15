@@ -209,12 +209,12 @@ class _InvestorSignupScreenState extends State<InvestorSignupScreen> {
           TextSpan(
             children: [
               TextSpan(
-                text: store.usesFirebaseEmailLink
+                text: store.usesEmailVerificationLink
                     ? 'Open the verification link sent to\n'
                     : 'Enter the code sent to\n',
               ),
               TextSpan(
-                text: store.usesFirebaseEmailLink
+                text: store.usesEmailVerificationLink
                     ? '${store.values['email']}.  '
                     : '${store.values['email']} / ${store.dialCode} ${store.values['phone']}.  ',
                 style: AppTextStyles.text(16, weight: FontWeight.w700),
@@ -233,7 +233,7 @@ class _InvestorSignupScreenState extends State<InvestorSignupScreen> {
           ),
         ),
         SizedBox(height: 19.w),
-        if (store.usesFirebaseEmailLink)
+        if (store.usesEmailVerificationLink)
           Text(
             'After verifying, return here and tap “I verified my email”.',
             style: AppTextStyles.text(14, color: AppColors.muted),
@@ -247,8 +247,8 @@ class _InvestorSignupScreenState extends State<InvestorSignupScreen> {
             onChanged: store.setCode,
             onSubmitted: _verify,
           ),
-        if (!store.usesFirebaseEmailLink) SizedBox(height: 17.w),
-        if (!store.usesFirebaseEmailLink)
+        if (!store.usesEmailVerificationLink) SizedBox(height: 17.w),
+        if (!store.usesEmailVerificationLink)
           Semantics(
             button: true,
             child: InkWell(
@@ -341,7 +341,7 @@ class _InvestorSignupScreenState extends State<InvestorSignupScreen> {
     final VoidCallback? action = switch (stage) {
       InvestorSignupStage.details => store.detailsFilled ? _create : null,
       InvestorSignupStage.verification =>
-        store.usesFirebaseEmailLink ||
+        store.usesEmailVerificationLink ||
                 (store.code.length == 6 && !store.codeRejected)
             ? _verify
             : null,
@@ -360,7 +360,7 @@ class _InvestorSignupScreenState extends State<InvestorSignupScreen> {
           label: switch (stage) {
             InvestorSignupStage.details => 'Create account',
             InvestorSignupStage.verification =>
-              store.usesFirebaseEmailLink ? 'I verified my email' : 'Verify',
+              store.usesEmailVerificationLink ? 'I verified my email' : 'Verify',
             _ => 'Continue',
           },
           loading: store.busy,

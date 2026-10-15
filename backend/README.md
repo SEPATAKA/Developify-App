@@ -25,52 +25,21 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## Authentication and profiles
+## Supabase authentication, database and storage
 
-Mobile and admin authentication use Firebase Authentication email/password
-accounts and Firebase ID tokens. Configure `FIREBASE_PROJECT_ID` (or
-`GOOGLE_CLOUD_PROJECT`) and provide server credentials through Application
-Default Credentials or the server-only `FIREBASE_SERVICE_ACCOUNT_JSON`
-environment variable. For local development, `FIREBASE_SERVICE_ACCOUNT_PATH`
-can point to the downloaded service-account JSON file stored outside this
-repository. Never put service-account credentials in either client or commit
-the credential file.
+Mobile and admin authentication use Supabase Auth email/password accounts and
+Supabase access tokens. Configure `SUPABASE_URL` and the server-only
+`SUPABASE_SERVICE_ROLE_KEY` in the backend environment. The service-role key
+must never be sent to the mobile client or committed.
 
-The backend verifies ID tokens and stores application data in Cloud Firestore.
-Core collections include `users`, `memberships`, `investorEntities`,
-`adminUsers`, `projects`, `transactions`, `investments`, `ledgerAccounts`,
-`ledgerEntries`, `paymentMethods`, `notifications`, `kycDrafts`, and
-`properties`. Money is stored as integer cents. Wallet, investment, deposit,
-and withdrawal ledger writes use Firestore transactions so balances, ledger
-entries, and related records are committed atomically. Admins need an
-`adminUsers` document with the account `email` and an allowed
-`role` (`admin`, `ops`, or `compliance`); a verified first sign-in links its
-Firebase UID. Create the Firebase Authentication admin account and
-`adminUsers/{id}` document before granting access. The document should contain
-`email`, `name`, `role`, and `locked`. Landowner profile creation accepts a
-valid Firebase identity, but sign-in is blocked until Firebase confirms email
-verification.
-Investor profile creation requires that verification up front. Both create
-the profile documents in a Firestore transaction.
-
-Application data and document uploads use Cloud Firestore and Firebase
-Storage. The API has no PostgreSQL, Prisma, Redis, or S3 runtime dependency.
-Document uploads require Firebase Storage to be enabled; this project currently
-requires a Blaze billing account for Storage. Do not enable billing without
-approval. Once enabled, set `FIREBASE_STORAGE_BUCKET` and grant the service
-account permission to create signed upload URLs.
-
-Before deploying Firestore rules and indexes from `developify-mobile`, compare
-them with the current Firebase Console configuration. Deployment replaces the
-published rules and indexes:
-
-```bash
-firebase deploy --only firestore --project developify-5615a
-```
-
-Never use a service-account key that has been shared or committed; revoke
-exposed keys in Google Cloud IAM and configure a newly issued credential
-outside the repository.
+Application documents retain their collection/document structure in
+`public.developify_documents`, with JSONB payloads and indexes. Financial
+operations use the `developify_commit` database function for atomic writes.
+Apply `supabase/migrations/001_initial_supabase.sql` and
+`supabase/migrations/002_atomic_document_operations.sql` in the Supabase SQL
+Editor before starting the backend. Authenticated uploads use the private
+`developify-private` Supabase Storage bucket; configure its name with
+`SUPABASE_STORAGE_BUCKET`.
 
 ## Project setup
 

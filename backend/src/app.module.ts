@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { FirebaseAdminModule } from './firebase/firebase-admin.module';
+import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -13,7 +13,6 @@ import { LandownerModule } from './modules/landowner/landowner.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { AdminModule } from './modules/admin/admin.module';
-import { MailModule } from './modules/mail/mail.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ApiExceptionFilter } from './modules/common/api-exception.filter';
@@ -22,9 +21,8 @@ import { AdminRolesGuard, JwtAuthGuard } from './modules/common/guards';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    FirebaseAdminModule,
+    SupabaseModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
-    MailModule,
     LedgerModule,
     PaymentsModule,
     AuthModule,

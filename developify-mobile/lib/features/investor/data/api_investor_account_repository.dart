@@ -4,6 +4,7 @@ import 'package:developify_mobile/core/assets/app_assets.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/models/monetary_amount.dart';
 import 'package:developify_mobile/core/network/api_client.dart';
+import 'package:developify_mobile/features/investor/domain/account_summary.dart';
 import 'package:developify_mobile/features/investor/domain/investment_policy.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account_context.dart';
@@ -17,15 +18,19 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
   final ApiClient _client;
   final InvestorAccountContext _context;
   final _changes = StreamController<InvestorAccountChange>.broadcast();
+  final _pendingDepositChecks = <String>{};
   bool _balanceVisible = true;
+  bool _cardPaymentsEnabled = false;
+  bool _disposed = false;
   InvestorAccountSnapshot? _snapshot;
   int _sequence = 0;
 
   String get _entity => _context.entity.name;
 
   @override
-  Set<PaymentMethodKind> get supportedPaymentMethods => const {
+  Set<PaymentMethodKind> get supportedPaymentMethods => {
     PaymentMethodKind.bankAccount,
+    if (_cardPaymentsEnabled) PaymentMethodKind.card,
   };
 
   @override
@@ -74,6 +79,43 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       projectId: map['projectId'] as String?,
       methodId: map['methodId'] as String?,
     );
+  }
+
+  void _watchPaystackDeposit(String transactionId) {
+    if (_disposed || !_pendingDepositChecks.add(transactionId)) return;
+    unawaited(_pollPaystackDeposit(transactionId));
+  }
+
+  Future<void> _pollPaystackDeposit(String transactionId) async {
+    const intervals = [
+      Duration(seconds: 5),
+      Duration(seconds: 10),
+      Duration(seconds: 15),
+      Duration(seconds: 30),
+      Duration(seconds: 60),
+      Duration(seconds: 60),
+      Duration(seconds: 60),
+    ];
+    try {
+      for (final interval in intervals) {
+        await Future<void>.delayed(interval);
+        if (_disposed) return;
+        final result = await transaction(transactionId);
+        if (result case Success(:final value)) {
+          if (value.status == InvestorTransactionStatus.successful) {
+            _notifyWalletMutation(walletChanged: true);
+            return;
+          }
+          if (value.status == InvestorTransactionStatus.failed) {
+            _notifyWalletMutation(walletChanged: false);
+            return;
+          }
+        }
+      }
+      if (!_disposed) _notifyWalletMutation(walletChanged: false);
+    } finally {
+      _pendingDepositChecks.remove(transactionId);
+    }
   }
 
   InvestorInvestment _mapInvestment(Object? json) {
@@ -155,6 +197,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
   InvestorAccountSnapshot _mapSnapshot(Object? json) {
     final map = json as Map<String, Object?>? ?? const {};
     final available = (map['availableCents'] as num?)?.toInt() ?? 0;
+    _cardPaymentsEnabled = map['cardPaymentsEnabled'] == true;
     final verificationName =
         map['verificationStatus'] as String? ?? 'incomplete';
     return InvestorAccountSnapshot(
@@ -168,9 +211,12 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       notifications: ((map['notifications'] as List<dynamic>?) ?? const [])
           .map(_mapNotification)
           .toList(),
-      paymentMethods: ((map['paymentMethods'] as List<dynamic>?) ?? const [])
-          .map(_mapMethod)
-          .toList(),
+      paymentMethods: [
+        ...((map['paymentMethods'] as List<dynamic>?) ?? const []).map(
+          _mapMethod,
+        ),
+        if (_cardPaymentsEnabled) InvestorDepositAccount.paystackMethod,
+      ],
       verification: VerificationStatus.values.firstWhere(
         (v) => v.name == verificationName,
         orElse: () => VerificationStatus.incomplete,
@@ -178,6 +224,61 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
       asOf: DateTime.now().toUtc(),
       balanceVisible: _balanceVisible,
     );
+  }
+
+  InvestorAccountSummary _mapBalance(Object? json) {
+    final map = json as Map<String, Object?>?;
+    if (map == null) {
+      throw const FormatException('Invalid wallet balance response.');
+    }
+    int readCents(String key) {
+      final value = map[key];
+      if (value is! num || !value.isFinite || value < 0) {
+        throw FormatException('Invalid $key in wallet balance response.');
+      }
+      final cents = value.toInt();
+      if (cents != value) {
+        throw FormatException('Invalid $key in wallet balance response.');
+      }
+      return cents;
+    }
+
+    final verificationName = map['verificationStatus'] as String?;
+    return InvestorAccountSummary(
+      available: MonetaryAmount(
+        readCents('availableCents'),
+        InvestmentPolicy.currency,
+      ),
+      investedCapital: MonetaryAmount(
+        readCents('heldPrincipalCents'),
+        InvestmentPolicy.currency,
+      ),
+      verification: VerificationStatus.values.firstWhere(
+        (status) => status.name == verificationName,
+        orElse: () => VerificationStatus.incomplete,
+      ),
+    );
+  }
+
+  @override
+  Future<Result<InvestorAccountSummary>> balance() async {
+    final result = await _client.request(
+      path: '/v1/wallet/balance',
+      query: {'entity': _entity},
+      decode: _mapBalance,
+    );
+    if (result case Failure<InvestorAccountSummary>(
+      :final error,
+    ) when error.statusCode == 404) {
+      final snapshotResult = await snapshot();
+      return switch (snapshotResult) {
+        Success<InvestorAccountSnapshot>(:final value) => Success(
+          InvestorAccountSummary.from(value),
+        ),
+        Failure<InvestorAccountSnapshot>(:final error) => Failure(error),
+      };
+    }
+    return result;
   }
 
   @override
@@ -213,11 +314,13 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
 
   @override
   Future<Result<InvestorNotification>> notification(String id) async {
-    final snap =
-        _snapshot ??
-        ((await snapshot()) is Success<InvestorAccountSnapshot>
-            ? (await snapshot() as Success<InvestorAccountSnapshot>).value
-            : null);
+    var snap = _snapshot;
+    if (snap == null) {
+      final result = await snapshot();
+      if (result case Success<InvestorAccountSnapshot>(:final value)) {
+        snap = value;
+      }
+    }
     final found = snap?.notifications.where((n) => n.id == id).firstOrNull;
     if (found == null) {
       return const Failure(
@@ -252,6 +355,20 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
     final instructions = rawInstructions is Map
         ? Map<String, Object?>.from(rawInstructions)
         : null;
+    final rawCheckoutUrl = map['checkoutUrl'];
+    String? checkoutUrl;
+    if (rawCheckoutUrl != null) {
+      if (rawCheckoutUrl is! String) {
+        throw const FormatException('Invalid Paystack checkout URL.');
+      }
+      final checkout = Uri.tryParse(rawCheckoutUrl);
+      if (checkout == null ||
+          checkout.scheme != 'https' ||
+          checkout.host != 'checkout.paystack.com') {
+        throw const FormatException('Invalid Paystack checkout URL.');
+      }
+      checkoutUrl = checkout.toString();
+    }
     return InvestorOperationReceipt(
       transactionId:
           map['id'] as String? ??
@@ -270,6 +387,17 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
               amountCents: int.tryParse('${instructions['amountCents']}') ?? 0,
               note: instructions['note'] as String? ?? '',
             ),
+      checkoutUrl: checkoutUrl,
+    );
+  }
+
+  void _notifyWalletMutation({required bool walletChanged}) {
+    _snapshot = null;
+    _changes.add(
+      InvestorAccountChange({
+        InvestorDataKind.transactions,
+        if (walletChanged) InvestorDataKind.wallet,
+      }),
     );
   }
 
@@ -336,7 +464,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
           ),
         );
       }
-      await snapshot();
+      _notifyWalletMutation(walletChanged: true);
       return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
@@ -372,7 +500,13 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
           ),
         );
       }
-      await snapshot();
+      _notifyWalletMutation(
+        walletChanged: receipt.status == InvestorTransactionStatus.successful,
+      );
+      if (receipt.checkoutUrl != null &&
+          receipt.status == InvestorTransactionStatus.pending) {
+        _watchPaystackDeposit(receipt.transactionId);
+      }
       return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
@@ -408,7 +542,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
           ),
         );
       }
-      await snapshot();
+      _notifyWalletMutation(walletChanged: true);
       return Success(receipt);
     }
     return result as Failure<InvestorOperationReceipt>;
@@ -480,6 +614,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
 
   @override
   void dispose() {
+    _disposed = true;
     _changes.close();
   }
 }
