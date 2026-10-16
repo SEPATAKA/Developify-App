@@ -45,11 +45,13 @@ begin
         'null'
       ) <> 'array'
     )
-    or case
-      when jsonb_typeof(registration -> 'representatives') = 'array'
-        then jsonb_array_length(registration -> 'representatives') > 20
-      else false
-    end
+    or (
+      case
+        when jsonb_typeof(registration -> 'representatives') = 'array'
+          then jsonb_array_length(registration -> 'representatives') > 20
+        else false
+      end
+    )
   then
     raise exception 'Invalid Developify signup profile metadata';
   end if;
