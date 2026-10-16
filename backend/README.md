@@ -35,9 +35,13 @@ must never be sent to the mobile client or committed.
 Application documents retain their collection/document structure in
 `public.developify_documents`, with JSONB payloads and indexes. Financial
 operations use the `developify_commit` database function for atomic writes.
+Firestore collection names are registered in
+`public.developify_collection_versions`; this does not copy the legacy
+Firestore document contents.
 Apply `supabase/migrations/001_initial_supabase.sql` and
-`supabase/migrations/002_atomic_document_operations.sql` in the Supabase SQL
-Editor before starting the backend. Authenticated uploads use the private
+`supabase/migrations/002_atomic_document_operations.sql` and
+`supabase/migrations/003_register_firestore_collections.sql` in the Supabase
+SQL Editor before starting the backend. Authenticated uploads use the private
 `developify-private` Supabase Storage bucket; configure its name with
 `SUPABASE_STORAGE_BUCKET`.
 

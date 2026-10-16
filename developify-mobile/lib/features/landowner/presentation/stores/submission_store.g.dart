@@ -114,6 +114,18 @@ mixin _$SubmissionStore on SubmissionStoreBase, Store {
     });
   }
 
+  late final _$loadAsyncAction = AsyncAction(
+    'SubmissionStoreBase.load',
+    context: context,
+  );
+
+  @override
+  Future<void> load({int requestedStep = 1}) {
+    return _$loadAsyncAction.run(
+      () => super.load(requestedStep: requestedStep),
+    );
+  }
+
   late final _$uploadDocumentAsyncAction = AsyncAction(
     'SubmissionStoreBase.uploadDocument',
     context: context,
@@ -154,6 +166,26 @@ mixin _$SubmissionStore on SubmissionStoreBase, Store {
   @override
   Future<bool> removeDocument(String key) {
     return _$removeDocumentAsyncAction.run(() => super.removeDocument(key));
+  }
+
+  late final _$saveAsyncAction = AsyncAction(
+    'SubmissionStoreBase.save',
+    context: context,
+  );
+
+  @override
+  Future<bool> save() {
+    return _$saveAsyncAction.run(() => super.save());
+  }
+
+  late final _$nextAsyncAction = AsyncAction(
+    'SubmissionStoreBase.next',
+    context: context,
+  );
+
+  @override
+  Future<bool> next() {
+    return _$nextAsyncAction.run(() => super.next());
   }
 
   late final _$submitAsyncAction = AsyncAction(
@@ -226,30 +258,6 @@ mixin _$SubmissionStore on SubmissionStoreBase, Store {
     );
     try {
       return super.addDocument(key);
-    } finally {
-      _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
-  void save() {
-    final _$actionInfo = _$SubmissionStoreBaseActionController.startAction(
-      name: 'SubmissionStoreBase.save',
-    );
-    try {
-      return super.save();
-    } finally {
-      _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
-    }
-  }
-
-  @override
-  bool next() {
-    final _$actionInfo = _$SubmissionStoreBaseActionController.startAction(
-      name: 'SubmissionStoreBase.next',
-    );
-    try {
-      return super.next();
     } finally {
       _$SubmissionStoreBaseActionController.endAction(_$actionInfo);
     }

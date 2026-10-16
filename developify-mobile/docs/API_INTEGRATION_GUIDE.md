@@ -6,7 +6,7 @@ For Ngoako Masetla and the receiving engineering team. This is a map of the deli
 
 ## Integration status and composition
 
-Repository registrations are in [AppDependencies.create](../lib/app/di/app_dependencies.dart). With a valid `API_BASE_URL` and `MOCK_MODE=false` (the default), the app registers the API-backed auth, investor, landowner, notification and profile repositories. Setting `MOCK_MODE=true`, or omitting a valid API URL, selects the mock repositories instead. The API adapters call the configured backend; they do not connect directly to a database.
+Repository registrations are in [AppDependencies.create](../lib/app/di/app_dependencies.dart). With `MOCK_MODE=false` (the default) and a valid `API_BASE_URL`, the app registers API-backed auth, investor account/catalogue/KYC, landowner, notification and profile repositories. Only the explicit `MOCK_MODE=true` setting selects mock repositories; live startup fails for invalid configuration rather than falling back to demo data. The API adapters call the configured backend; they do not connect directly to a database.
 
 Replace implementations at this composition root while keeping independent stores, route ownership and typed models. Add agreed server contracts before financial or KYC writes. Some current interfaces deliberately expose synchronous local draft/simulation operations. They are not ready-made network endpoints: introduce explicit asynchronous persistence/quote contracts where required, with targeted tests, rather than hiding unawaited network writes behind synchronous setters.
 
@@ -21,7 +21,7 @@ Replace implementations at this composition root while keeping independent store
 - Payment provider sandbox, tokenization/authorization flow, bank verification and authenticated webhook access.
 - Push provider and installation-registry contracts, service project/app identifiers, monitoring owners, privacy/consent rules and signing/CI access.
 
-The Flutter app calls authenticated APIs. It must never connect directly to the production database or carry server credentials.
+The Flutter app calls authenticated APIs. The backend uses Supabase Auth, the `developify_documents` JSONB document table, the project’s migration/version tables, and private Supabase Storage for uploaded files. It must never connect directly to the production database or carry server credentials. Transient interface state and unsaved in-progress form state may remain in memory; only server-confirmed writes are durable. A mock-mode run is not evidence of Supabase persistence.
 
 ## Integration map
 
@@ -31,7 +31,7 @@ Every area below uses the shared composition root above. Method signatures and m
 
 Contract: [AuthRepository](../lib/features/authentication/domain/auth_repository.dart). Implementations: [ApiAuthRepository](../lib/features/authentication/data/api_auth_repository.dart) and [MockAuthRepository](../lib/features/authentication/data/mock_auth_repository.dart).
 
-`signIn(email, password)` signs in through Supabase Auth, requires a verified email, sends the Supabase access token to `/v1/auth/supabase/session`, and returns the matching application profile. Investor signup creates a Supabase email/password account and requests email verification before the backend creates its profile and membership documents. Passwords are sent only to Supabase Auth. The Supabase service-role key is server-only.
+`signIn(email, password)` signs in through Supabase Auth, requires a verified email, sends the Supabase access token to `/v1/auth/supabase/session`, and returns the matching application profile. Investor signup creates a Supabase email/password account and requests email verification before the backend creates its profile and membership documents. Passwords are sent only to Supabase Auth. Public signup and password recovery require custom SMTP: Supabase's default mailer only delivers to project team addresses and is rate-limited. The Supabase service-role key is server-only.
 
 Admin sign-in also uses Supabase Auth and exchanges its access token at `/v1/auth/admin/supabase-session`. Admin authorization comes from the `adminUsers` document's `role`; protected API requests verify Supabase tokens and enforce admin role metadata. Admin user listing and account locking use the Supabase-backed document store. Social sign-in remains unavailable.
 
@@ -53,7 +53,7 @@ These live flows require the deployed API to include the authenticated upload/pr
 
 ### Investor catalogue, favourites and search
 
-Contract: [InvestorCatalogRepository](../lib/features/investor/domain/investor_repository.dart). Implementation: [MockInvestorCatalogRepository](../lib/features/investor/data/mock_investor_catalog_repository.dart). `projects() -> Result<List<InvestorProject>>`, `project(id) -> Result<InvestorProject>`, `currentProject(id) -> InvestorProject?`; `changes` is a stream. Favourites use `favouriteIds` and `setFavourite(id, bool) -> Result<void>`; searches use `recentSearches`, `suggestedProjectIds` and `rememberSearch(query)`. `asOf` is the mock catalogue reference date.
+Contract: [InvestorCatalogRepository](../lib/features/investor/domain/investor_repository.dart). Live implementation: [ApiInvestorCatalogRepository](../lib/features/investor/data/api_investor_catalog_repository.dart); demo implementation: [MockInvestorCatalogRepository](../lib/features/investor/data/mock_investor_catalog_repository.dart). `projects() -> Result<List<InvestorProject>>`, `project(id) -> Result<InvestorProject>`, `currentProject(id) -> InvestorProject?`; `changes` is a stream. Favourites and recent searches use authenticated API endpoints in live mode. `currentProject` is a cached read model, not a network call.
 
 Backend work: authoritative project IDs, currency, annual basis-point rate, term/cadence, minimum/capacity/status, filters and stable ordering. Agree cursor pagination before replacing a full-list contract; do not silently drop later pages. Preserve empty results and not-found/forbidden distinctions. Favourites are entity-scoped and need optimistic rollback and last-intent protection. `currentProject` is a local read model, not a network call.
 

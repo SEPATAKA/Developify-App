@@ -4,11 +4,10 @@ import {
   AdminNotificationsController,
   NotificationsController,
 } from './notifications.controller';
-import { PushRegistryService } from './push-registry.service';
 
 @Module({
-  providers: [NotificationsService, PushRegistryService],
+  providers: [NotificationsService],
   controllers: [NotificationsController, AdminNotificationsController],
-  exports: [NotificationsService, PushRegistryService],
+  exports: [NotificationsService],
 })
 export class NotificationsModule {}

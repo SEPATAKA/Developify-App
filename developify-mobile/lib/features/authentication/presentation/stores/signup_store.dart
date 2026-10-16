@@ -196,6 +196,12 @@ abstract class SignupStoreBase with Store, Lifecycle {
           }
           return true;
         case Failure(:final error):
+          if (_repository.emailVerificationPending) {
+            status = LoadStatus.success;
+            this.error = null;
+            verificationSent = true;
+            return true;
+          }
           status = LoadStatus.error;
           this.error = error.message;
           if (error.kind == FailureKind.validation) {

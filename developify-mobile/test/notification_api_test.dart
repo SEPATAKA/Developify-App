@@ -40,7 +40,7 @@ void main() {
     final adapter = ChatAdapter();
     final dio = Dio()..httpClientAdapter = adapter;
     final tokens = MemoryTokenStorage();
-    await tokens.writeToken('firebase-id-token');
+    await tokens.writeToken('supabase-access-token');
     final client = ApiClient(
       environment: const AppEnvironment(
         apiBaseUrl: 'https://api.example.test',
@@ -69,7 +69,7 @@ void main() {
     );
     expect(
       adapter.requests.map((request) => request.headers['Authorization']),
-      everyElement('Bearer firebase-id-token'),
+      everyElement('Bearer supabase-access-token'),
     );
     expect(adapter.requests.last.data, {'text': 'Please help.'});
     client.dispose();

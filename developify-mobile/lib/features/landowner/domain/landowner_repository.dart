@@ -15,7 +15,8 @@ abstract interface class LandownerRepository {
   Future<Result<Property>> property(String id);
   Future<Result<EarningsSummary>> earnings();
   SubmissionDraft readDraft(String id);
-  void saveDraft(SubmissionDraft draft);
+  Future<Result<SubmissionDraft>> loadDraft(String id);
+  Future<Result<void>> saveDraft(SubmissionDraft draft);
   Future<Result<LocalAttachment>> uploadAttachment(
     String draftId,
     String key,

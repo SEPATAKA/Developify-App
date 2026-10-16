@@ -2,6 +2,31 @@ import 'package:dio/dio.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 
 abstract final class ApiErrorMapper {
+  static String? _authSessionMessage(DioException error) {
+    if (!error.requestOptions.path.endsWith('/v1/auth/supabase/session')) {
+      return null;
+    }
+    final response = error.response?.data;
+    if (response is! Map) return null;
+    final message = response['message'];
+    if (message is! String) return null;
+    return switch (message) {
+      'Verify your email address before signing in.' =>
+        'Verify your email using the link we sent, then sign in again.',
+      'No Developify user profile exists for this account.' =>
+        'Your email is verified, but your Developify profile is missing. Please contact support to restore your account.',
+      'This Developify account is unavailable.' =>
+        'This Developify account is unavailable. Please contact support.',
+      'This account is linked to another identity.' =>
+        'This account is already linked to a different sign-in identity. Please contact support.',
+      'Invalid, expired, or revoked Supabase access token.' =>
+        'Your sign-in session expired. Please sign in again.',
+      'The verified account profile could not be created.' =>
+        'Your account was verified, but its Developify profile could not be created. Please contact support.',
+      _ => null,
+    };
+  }
+
   static AppFailure map(Object error) {
     if (error is! DioException) {
       return const AppFailure(
@@ -31,9 +56,9 @@ abstract final class ApiErrorMapper {
         'A secure connection could not be established.',
       ),
       DioExceptionType.badResponse => switch (status) {
-        401 => const AppFailure(
+        401 => AppFailure(
           FailureKind.unauthenticated,
-          'Please sign in again.',
+          _authSessionMessage(error) ?? 'Please sign in again.',
           statusCode: 401,
         ),
         403 => const AppFailure(

@@ -33,7 +33,6 @@ import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/core/errors/result.dart';
 import 'package:developify_mobile/core/network/api_client.dart';
 import 'package:developify_mobile/core/services/mock_behavior.dart';
-import 'package:developify_mobile/core/services/push_notification_service.dart';
 import 'package:developify_mobile/core/services/session_service.dart';
 import 'package:developify_mobile/core/services/telemetry.dart';
 import 'package:developify_mobile/core/storage/token_storage.dart';
@@ -72,7 +71,6 @@ final class AppDependencies {
   static bool _supabaseInitialized = false;
   final GetIt container;
   SessionService get session => container<SessionService>();
-  PushNotificationService get push => container<PushNotificationService>();
   TelemetryServices get telemetry => container<TelemetryServices>();
   static Future<AppDependencies> create({
     AppEnvironment environment = const AppEnvironment(),
@@ -111,8 +109,6 @@ final class AppDependencies {
       supabaseClient = Supabase.instance.client;
     }
     final services = telemetry ?? await TelemetryServices.initialize();
-    final push = OneSignalPushService(environment.oneSignalAppId);
-    await push.initialize();
     final useApi = !environment.mockMode && environment.apiUri != null;
     get.registerSingleton<AppEnvironment>(environment);
     get.registerSingleton<SessionService>(
@@ -129,10 +125,6 @@ final class AppDependencies {
     get.registerSingleton<CrashReporter>(services.crashes);
     get.registerSingleton<FeatureConfigService>(services.config);
     get.registerSingleton<PerformanceService>(services.performance);
-    get.registerSingleton<PushNotificationService>(
-      push,
-      dispose: (value) => value.dispose(),
-    );
     final apiClient = ApiClient(
       environment: environment,
       tokens: authTokenProvider,
@@ -399,7 +391,6 @@ final class AppDependencies {
     } on Object catch (error, stack) {
       await telemetry.crashes.record(error, stack);
     }
-    await push.removeExternalUserId();
   }
 
   Future<void> dispose() => container.reset();

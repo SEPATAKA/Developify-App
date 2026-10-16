@@ -305,12 +305,18 @@ final class ApiAuthRepository implements AuthRepository {
       _
           when raw.contains('invalid login credentials') ||
               raw.contains('invalid credentials') =>
-        'Invalid email or password.',
+        'Invalid email or password. If this account was migrated, use Forgot Password to set a Supabase password.',
       _ when raw.contains('password') && raw.contains('least') =>
         'Choose a stronger password.',
       _ when raw.contains('email') && raw.contains('valid') =>
         'Enter a valid email address.',
-      _ when raw.contains('too many') =>
+      _ when raw.contains('email address not authorized') =>
+        'Supabase cannot send a verification email to this address yet. Configure custom SMTP in Supabase Auth, or use a project team email while testing.',
+      _ when raw.contains('redirect') && raw.contains('url') =>
+        'This app’s verification redirect is not allowed by Supabase. Add its /auth-callback/ URL under Authentication → URL Configuration.',
+      _ when raw.contains('signup') && raw.contains('disabled') =>
+        'New accounts are disabled in Supabase Auth. Enable Allow new users to sign up.',
+      _ when raw.contains('too many') || raw.contains('rate limit') =>
         'Too many attempts. Please wait and try again.',
       _ when raw.contains('not confirmed') =>
         'Verify your email using the link we sent, then sign in again.',
@@ -319,12 +325,15 @@ final class ApiAuthRepository implements AuthRepository {
             ? 'Supabase account creation failed. Check your connection and try again.'
             : 'Supabase sign-in failed. Check your credentials and try again.',
     };
-    return AppFailure(
-      raw.contains('network')
-          ? FailureKind.network
-          : FailureKind.unauthenticated,
-      message,
-    );
+    final kind = switch (true) {
+      _ when raw.contains('network') => FailureKind.network,
+      _ when raw.contains('not authorized') ||
+          (raw.contains('redirect') && raw.contains('url')) ||
+          (raw.contains('signup') && raw.contains('disabled')) =>
+        FailureKind.configuration,
+      _ => FailureKind.unauthenticated,
+    };
+    return AppFailure(kind, message);
   }
 
   @override
@@ -352,6 +361,8 @@ final class ApiAuthRepository implements AuthRepository {
   Future<Result<AppUser>> registerLandowner(
     LandownerRegistration registration,
   ) async {
+    _pendingLandownerRegistration = null;
+    _emailVerificationPending = false;
     try {
       final response = await supabase.auth.signUp(
         email: registration.email.trim(),
@@ -367,7 +378,6 @@ final class ApiAuthRepository implements AuthRepository {
           },
         },
       );
-      _pendingLandownerRegistration = registration;
       final user = response.user;
       final token = response.session?.accessToken;
       if (user == null) {
@@ -378,20 +388,13 @@ final class ApiAuthRepository implements AuthRepository {
           ),
         );
       }
-      if (token == null) {
+      _pendingLandownerRegistration = registration;
+      if (token == null || user.emailConfirmedAt == null) {
         _emailVerificationPending = true;
         return const Failure(
           AppFailure(
             FailureKind.unauthenticated,
             'Check your email for the Supabase verification link, then sign in to finish registration.',
-          ),
-        );
-      }
-      if (user.emailConfirmedAt == null) {
-        return const Failure(
-          AppFailure(
-            FailureKind.unauthenticated,
-            'Verify your email before continuing.',
           ),
         );
       }

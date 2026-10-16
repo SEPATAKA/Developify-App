@@ -136,6 +136,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
         expect(dependencies.session.isAuthenticated, true);
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
         expect(auth.isDisposed, true);
         expect(auth.password, isEmpty);
         auth.setPassword('Disposed123!');

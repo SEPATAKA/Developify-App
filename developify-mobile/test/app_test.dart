@@ -12,7 +12,6 @@ import 'package:developify_mobile/app/di/app_dependencies.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/core/network/api_client.dart';
-import 'package:developify_mobile/core/services/push_notification_service.dart';
 import 'package:developify_mobile/core/services/telemetry.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/auth_store.dart';
@@ -70,8 +69,6 @@ void main() {
       launch: false,
     );
     expect(dependencies.telemetry.analytics, isA<NoopAnalytics>());
-    expect(dependencies.push.isConfigured, false);
-    expect(await dependencies.push.requestPermission(), false);
     expect(dependencies.container<ApiClient>(), isNotNull);
     final first = dependencies.container<AuthStore>();
     final second = dependencies.container<AuthStore>();
@@ -80,26 +77,6 @@ void main() {
     second.dispose();
     await dependencies.dispose();
   });
-  test(
-    'Push payload contract only accepts supported serializable destinations',
-    () {
-      expect(
-        PushTarget.fromPlaceholder({
-          'destination': 'property',
-          'id': '../secret',
-        }),
-        isNull,
-      );
-      expect(
-        PushTarget.fromPlaceholder({
-          'destination': 'property',
-          'id': 'ridge-live',
-        })!.id,
-        'ridge-live',
-      );
-      expect(PushTarget.fromPlaceholder({'destination': 'unknown'}), isNull);
-    },
-  );
   testWidgets(
     'Startup, onboarding and authentication redirect retain requested route',
     (tester) async {
@@ -410,9 +387,27 @@ void main() {
         deps.container<LandownerRepository>(),
         'marula-draft',
       );
+      draft.update(
+        draft.draft.copyWith(
+          name: 'Marula Heights',
+          propertyNumber: '12',
+          propertyType: 'Vacant land',
+          size: '1.4',
+          unit: 'Hectares',
+          deedsOffice: 'Johannesburg',
+          address: 'Malibongwe Drive',
+          city: 'Johannesburg',
+          province: 'GP',
+          latitude: '-26.076245',
+          longitude: '27.958114',
+        ),
+      );
+      draft.addSamplePhotos();
       draft.addDocument('identity');
+      draft.addDocument('title');
+      draft.addDocument('rates');
       draft.update(draft.draft.copyWith(accepted: true));
-      draft.save();
+      expect(await draft.save(), isTrue);
       draft.dispose();
       final router = createAppRouter(
         deps,

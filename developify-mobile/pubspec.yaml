@@ -17,7 +17,6 @@ dependencies:
   flutter_svg: ^2.3.0
   flutter_secure_storage: ^10.3.1
   another_flushbar: ^2.2.4
-  onesignal_flutter: ^5.6.3
   url_launcher: ^6.3.2
   file_picker: ^13.1.0
   supabase_flutter: ^2.18.3

@@ -14,9 +14,7 @@ flutter devices
 flutter run --target lib/main.dart \
   --dart-define=MOCK_MODE=true \
   --dart-define=MOCK_SCENARIO=success \
-  --dart-define=FIREBASE_ENABLED=false \
-  --dart-define=TELEMETRY_ENABLED=false \
-  --dart-define=ONESIGNAL_APP_ID=
+  --dart-define=TELEMETRY_ENABLED=false
 ```
 
 Select the Android emulator or iOS simulator when prompted, or add `-d DEVICE_ID` using an ID returned by `flutter devices`. Both portals are available in the app switcher; switching does not require another login. An authenticated cold restart starts on Investor Home.
@@ -35,7 +33,7 @@ The standalone developer PDF is a reading copy of this documentation. Markdown i
 
 ## Stack and structure
 
-Flutter/Dart, MobX with committed generated source, GetIt constructor composition, go_router, Dio, ScreenUtil, flutter_svg and flutter_secure_storage. Firebase and OneSignal adapters are optional and unconfigured in this delivery. Dependency versions are retained in [pubspec.lock](pubspec.lock); CocoaPods dependencies are retained in [ios/Podfile.lock](ios/Podfile.lock).
+Flutter/Dart, Supabase Auth, MobX with committed generated source, GetIt constructor composition, go_router, Dio, ScreenUtil, flutter_svg and flutter_secure_storage. Remote push notifications are not configured. Dependency versions are retained in [pubspec.lock](pubspec.lock); CocoaPods dependencies are retained in [ios/Podfile.lock](ios/Podfile.lock).
 
 ```text
 lib/main.dart          Normal application entry point

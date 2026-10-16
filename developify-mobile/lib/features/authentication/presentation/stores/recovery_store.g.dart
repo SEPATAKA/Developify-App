@@ -317,6 +317,18 @@ mixin _$RecoveryStore on RecoveryStoreBase, Store {
   }
 
   @override
+  void startPasswordReset() {
+    final _$actionInfo = _$RecoveryStoreBaseActionController.startAction(
+      name: 'RecoveryStoreBase.startPasswordReset',
+    );
+    try {
+      return super.startPasswordReset();
+    } finally {
+      _$RecoveryStoreBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void setCode(String value) {
     final _$actionInfo = _$RecoveryStoreBaseActionController.startAction(
       name: 'RecoveryStoreBase.setCode',

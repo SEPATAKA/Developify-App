@@ -6,6 +6,7 @@ import 'package:developify_mobile/features/authentication/data/mock_auth_reposit
 import 'package:developify_mobile/features/authentication/domain/landowner_registration.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/auth_store.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/recovery_store.dart';
+import 'package:developify_mobile/features/authentication/presentation/stores/signup_store.dart';
 import 'package:developify_mobile/features/landowner/data/mock_landowner_repository.dart';
 import 'package:developify_mobile/features/landowner/presentation/stores/home_store.dart';
 import 'package:developify_mobile/features/landowner/presentation/stores/properties_store.dart';
@@ -53,6 +54,30 @@ void main() {
       session.dispose();
     },
   );
+  test('Landowner signup reports pending email verification as success', () async {
+    final session = SessionService();
+    final store = SignupStore(
+      MockAuthRepository(behavior(), emailVerificationPending: true),
+      session,
+    );
+    store.setName('Amina Dlamini');
+    store.setEmail('amina@example.test');
+    store.setPhone('8200000000');
+    store.setPassword('Password1');
+    store.setConfirmation('Password1');
+    store.acceptTerms(true);
+    expect(store.continueToEntity(), true);
+    store.selectEntity(EntityType.individual);
+
+    expect(await store.createAccount(), true);
+    expect(store.status, LoadStatus.success);
+    expect(store.verificationSent, true);
+    expect(store.error, isNull);
+    expect(session.isAuthenticated, false);
+
+    store.dispose();
+    session.dispose();
+  });
   test('Disposed async stores ignore late results', () async {
     final store = HomeStore(MockLandownerRepository(behavior()));
     final pending = store.load();
@@ -206,7 +231,7 @@ void main() {
     () async {
       final repository = MockLandownerRepository(behavior());
       final store = SubmissionStore(repository, 'test-draft');
-      expect(store.next(), false);
+      expect(await store.next(), false);
       expect(store.errors['name'], isNotNull);
       for (final entry in {
         'name': 'Marula Heights',
@@ -223,20 +248,21 @@ void main() {
       }.entries) {
         store.setField(entry.key, entry.value);
       }
-      expect(store.next(), true);
+      expect(await store.next(), true);
       store.setStep(2);
-      expect(store.next(), true);
+      expect(await store.next(), true);
       store.setField('latitude', 'NaN');
-      expect(store.next(), false);
+      expect(await store.next(), false);
       store.setField('latitude', '-26.076');
       store.addSamplePhotos();
-      store.save();
+      expect(await store.save(), isTrue);
       final resumed = SubmissionStore(repository, 'test-draft');
+      await resumed.load();
       expect(resumed.draft.photos.length, 4);
       resumed.setStep(7);
-      expect(resumed.next(), false);
+      expect(await resumed.next(), false);
       resumed.addDocument('identity');
-      expect(resumed.next(), true);
+      expect(await resumed.next(), true);
       resumed.setStep(9);
       expect(await resumed.submit(), isNull);
       resumed.update(resumed.draft.copyWith(accepted: true));

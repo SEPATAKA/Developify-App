@@ -107,9 +107,9 @@ void main() {
   tearDown(() => client.dispose());
 
   test(
-    'Profile photo bytes and Firestore reference save immediately',
+    'Profile photo bytes and Supabase reference save immediately',
     () async {
-      await tokens.writeToken('firebase-id-token');
+      await tokens.writeToken('supabase-access-token');
       final file = PickedLocalFile(
         name: 'avatar.png',
         mimeType: 'image/png',
@@ -150,7 +150,7 @@ void main() {
       final upload = adapter.requests.first;
       expect(upload.uri.path, '/v1/documents/upload');
       expect(upload.method, 'POST');
-      expect(upload.headers['Authorization'], 'Bearer firebase-id-token');
+      expect(upload.headers['Authorization'], 'Bearer supabase-access-token');
       expect((upload.data as Map)['name'], 'avatar.png');
       expect((upload.data as Map)['mimeType'], 'image/png');
       expect((upload.data as Map)['prefix'], 'profile/avatar');
@@ -172,7 +172,7 @@ void main() {
   );
 
   test(
-    'Failed Firestore profile-photo save removes the uploaded object',
+    'Failed Supabase profile-photo save removes the uploaded object',
     () async {
       final file = PickedLocalFile(
         name: 'avatar.png',

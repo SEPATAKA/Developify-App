@@ -327,7 +327,7 @@ void main() {
     submission.addDocument('title');
     submission.addDocument('rates');
     submission.update(submission.draft.copyWith(accepted: true));
-    submission.save();
+    await submission.save();
     submission.dispose();
     unawaited(router.push('/submit/9?draft=marula-draft'));
     await capture('submit-review-ready');

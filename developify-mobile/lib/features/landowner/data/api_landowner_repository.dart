@@ -7,6 +7,7 @@ import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/landowner/domain/landowner_repository.dart';
 import 'package:developify_mobile/features/landowner/domain/property.dart';
 import 'package:developify_mobile/features/landowner/domain/submission_draft.dart';
+import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
 final class ApiLandownerRepository implements LandownerRepository {
   ApiLandownerRepository(this._client, {DocumentUploader? uploader})
@@ -134,14 +135,97 @@ final class ApiLandownerRepository implements LandownerRepository {
   }
 
   @override
-  void saveDraft(SubmissionDraft draft) {
-    _drafts[draft.id] = draft;
-    unawaited(_persistDraft(draft));
+  Future<Result<SubmissionDraft>> loadDraft(String id) async {
+    final result = await _client.request<Object?>(
+      path: '/v1/landowner/drafts/${Uri.encodeComponent(id)}',
+      decode: (json) => json,
+    );
+    if (result case Failure(:final error)) return Failure(error);
+    final response = (result as Success<Object?>).value;
+    if (response is! Map) {
+      return const Failure(
+        AppFailure(FailureKind.server, 'The saved property draft is invalid.'),
+      );
+    }
+    final map = Map<String, Object?>.from(response);
+    final payload = map['payload'] is Map
+        ? Map<String, Object?>.from(map['payload'] as Map)
+        : const <String, Object?>{};
+    String text(String key) => payload[key]?.toString() ?? '';
+    final entityName = payload['entity'] as String?;
+    final entity = EntityType.values.firstWhere(
+      (value) => value.name == entityName,
+      orElse: () => EntityType.individual,
+    );
+    final photos = <LocalAttachment>[];
+    final documents = <String, LocalAttachment>{};
+    final rawDocuments = map['documents'];
+    if (rawDocuments is List) {
+      for (final raw in rawDocuments.whereType<Map>()) {
+        final document = Map<String, Object?>.from(raw);
+        final key = document['key'] as String? ?? '';
+        final attachment = LocalAttachment(
+          id: document['id'] as String? ?? key,
+          name: document['name'] as String? ?? key,
+          bytes: (document['sizeBytes'] as num?)?.toInt() ?? 0,
+          mimeType:
+              document['mimeType'] as String? ?? 'application/octet-stream',
+          storageKey: document['storageKey'] as String?,
+          documentKey: key,
+        );
+        if (key.startsWith('site-photo-')) {
+          photos.add(attachment);
+        } else {
+          documents[key] = attachment;
+        }
+      }
+    }
+    final draft = SubmissionDraft(
+      id: id,
+      step: (map['step'] as num?)?.toInt() ?? 1,
+      name: text('name'),
+      legalDescription: text('legalDescription'),
+      propertyNumber: text('number'),
+      propertyType: text('type'),
+      size: text('size'),
+      unit: text('unit'),
+      deedsOffice: text('deedsOffice'),
+      address: text('address'),
+      city: text('city'),
+      town: text('town'),
+      country: text('country'),
+      monthlyLease: text('monthlyLease'),
+      province: text('province'),
+      postalCode: text('postal'),
+      latitude: text('latitude'),
+      longitude: text('longitude'),
+      photos: photos,
+      documents: documents,
+      entity: entity,
+      deal: text('deal'),
+      price: text('price'),
+      notes: text('notes'),
+      coOwners: payload['coOwners'] == true,
+      hasValuation: payload['hasValuation'] == true,
+      accepted: payload['accepted'] == true,
+    );
+    _drafts[id] = draft;
+    return Success(draft);
+  }
+
+  @override
+  Future<Result<void>> saveDraft(SubmissionDraft draft) async {
+    final result = await _persistDraft(draft);
+    if (result.isSuccess) {
+      _drafts[draft.id] = draft;
+      _changes.add(null);
+    }
+    return result;
   }
 
   Future<Result<void>> _persistDraft(SubmissionDraft draft) =>
       _client.request<void>(
-        path: '/v1/landowner/drafts/${draft.id}',
+        path: '/v1/landowner/drafts/${Uri.encodeComponent(draft.id)}',
         method: 'PUT',
         data: {
           'step': draft.step,
@@ -168,6 +252,7 @@ final class ApiLandownerRepository implements LandownerRepository {
             'deal': draft.deal,
             'coOwners': draft.coOwners,
             'hasValuation': draft.hasValuation,
+            'accepted': draft.accepted,
             'erf': draft.propertyNumber,
           },
         },

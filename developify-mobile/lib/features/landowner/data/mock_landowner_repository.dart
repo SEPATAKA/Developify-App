@@ -226,9 +226,14 @@ final class MockLandownerRepository implements LandownerRepository {
   }
 
   @override
-  void saveDraft(SubmissionDraft draft) {
+  Future<Result<SubmissionDraft>> loadDraft(String id) async =>
+      Success(readDraft(id));
+
+  @override
+  Future<Result<void>> saveDraft(SubmissionDraft draft) async {
     _drafts[draft.id] = draft;
     _changes.add(null);
+    return const Success(null);
   }
 
   @override

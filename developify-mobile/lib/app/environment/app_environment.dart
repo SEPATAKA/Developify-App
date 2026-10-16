@@ -22,7 +22,6 @@ final class AppEnvironment {
     this.mockMode = true,
     this.mockDelay = const Duration(milliseconds: 350),
     this.mockScenario = MockScenario.success,
-    this.oneSignalAppId = '',
     this.supabaseUrl = 'https://jbrpleyrkdgnrmfakdyk.supabase.co',
     this.supabaseAnonKey = '',
     this.telemetryEnabled = false,
@@ -34,7 +33,10 @@ final class AppEnvironment {
       defaultValue: 'success',
     );
     return AppEnvironment(
-      apiBaseUrl: const String.fromEnvironment('API_BASE_URL'),
+      apiBaseUrl: const String.fromEnvironment(
+        'API_BASE_URL',
+        defaultValue: 'https://developify-api.onrender.com',
+      ),
       mockMode: const bool.fromEnvironment('MOCK_MODE', defaultValue: false),
       mockDelay: const Duration(
         milliseconds: int.fromEnvironment('MOCK_DELAY_MS', defaultValue: 350),
@@ -56,7 +58,6 @@ final class AppEnvironment {
         'missing_item' => MockScenario.missingItem,
         _ => MockScenario.success,
       },
-      oneSignalAppId: const String.fromEnvironment('ONESIGNAL_APP_ID'),
       supabaseUrl: const String.fromEnvironment(
         'SUPABASE_URL',
         defaultValue: 'https://jbrpleyrkdgnrmfakdyk.supabase.co',
@@ -73,7 +74,6 @@ final class AppEnvironment {
   final bool mockMode;
   final Duration mockDelay;
   final MockScenario mockScenario;
-  final String oneSignalAppId;
   final String supabaseUrl;
   final String supabaseAnonKey;
   final bool telemetryEnabled;

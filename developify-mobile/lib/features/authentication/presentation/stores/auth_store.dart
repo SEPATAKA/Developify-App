@@ -120,7 +120,8 @@ abstract class AuthStoreBase with Store, Lifecycle {
 
       return await runInAction(() {
         status = LoadStatus.error;
-        error = 'Unable to sign in. Check your connection and try again.';
+        error =
+            'Unable to complete sign-in. Check your connection and try again. If this account was migrated, use Forgot Password to set a Supabase password.';
         return false;
       });
     }

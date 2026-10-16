@@ -13,8 +13,10 @@ class SubmissionStore = SubmissionStoreBase with _$SubmissionStore;
 
 abstract class SubmissionStoreBase with Store, Lifecycle {
   SubmissionStoreBase(this._repository, String draftId)
-    : draft = _repository.readDraft(draftId);
+    : _draftId = draftId,
+      draft = SubmissionDraft(id: draftId);
   final LandownerRepository _repository;
+  final String _draftId;
   @observable
   SubmissionDraft draft;
   @observable
@@ -29,6 +31,28 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   int get step => draft.step;
   @computed
   double get progress => step / 10;
+
+  @action
+  Future<void> load({int requestedStep = 1}) async {
+    if (isDisposed) return;
+    final request = beginRequest();
+    status = LoadStatus.loading;
+    error = null;
+    final result = await _repository.loadDraft(_draftId);
+    if (!isCurrent(request)) return;
+    runInAction(() {
+      switch (result) {
+        case Success(:final value):
+          if (!dirty) {
+            draft = value.copyWith(step: requestedStep);
+          }
+          status = LoadStatus.success;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+      }
+    });
+  }
 
   @action
   void update(SubmissionDraft value) {
@@ -176,7 +200,14 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   @action
   Future<bool> removeDocument(String key) async {
     final attachment = draft.documents[key];
-    if (attachment == null || isDisposed) return false;
+    if (isDisposed) return false;
+    if (attachment == null) {
+      if (key != 'co-owner' || !draft.coOwners) return false;
+      draft = draft.copyWith(coOwners: false);
+      dirty = true;
+      error = null;
+      return true;
+    }
     final result = await _repository.removeAttachment(draft.id, attachment);
     if (isDisposed) return false;
     return runInAction(() {
@@ -199,9 +230,23 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   }
 
   @action
-  void save() {
-    _repository.saveDraft(draft);
-    dirty = false;
+  Future<bool> save() async {
+    if (isDisposed) return false;
+    error = null;
+    final result = await _repository.saveDraft(draft);
+    if (isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success():
+          dirty = false;
+          status = LoadStatus.success;
+          return true;
+        case Failure(:final error):
+          this.error = error.message;
+          status = LoadStatus.error;
+          return false;
+      }
+    });
   }
 
   String? _moneyError(String value, String label) {
@@ -289,11 +334,11 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
   }
 
   @action
-  bool next() {
+  Future<bool> next() async {
+    if (status == LoadStatus.loading || isDisposed) return false;
     errors = validateStep(step);
     if (errors.isNotEmpty) return false;
-    save();
-    return true;
+    return save();
   }
 
   @action
@@ -310,6 +355,13 @@ abstract class SubmissionStoreBase with Store, Lifecycle {
     status = LoadStatus.loading;
     error = null;
     final request = beginRequest();
+    final saved = await _repository.saveDraft(draft);
+    if (!isCurrent(request)) return null;
+    if (saved case Failure(:final error)) {
+      this.error = error.message;
+      status = LoadStatus.error;
+      return null;
+    }
     final result = await _repository.submit(draft);
     if (!isCurrent(request)) return null;
     return runInAction(() {

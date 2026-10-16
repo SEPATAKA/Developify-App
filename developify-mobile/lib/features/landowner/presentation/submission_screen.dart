@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -47,12 +49,16 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
   void initState() {
     super.initState();
     store.setStep(widget.step);
+    unawaited(store.load(requestedStep: widget.step));
   }
 
   @override
   void didUpdateWidget(SubmissionScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.store != store) oldWidget.store.dispose();
+    if (oldWidget.store != store) {
+      oldWidget.store.dispose();
+      unawaited(store.load(requestedStep: widget.step));
+    }
     store.setStep(widget.step);
   }
 
@@ -63,8 +69,8 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
     super.dispose();
   }
 
-  void _go(int step, {bool review = false}) {
-    store.save();
+  Future<void> _go(int step, {bool review = false}) async {
+    if (!await store.save() || !mounted) return;
     context.pushReplacementNamed(
       Routes.submit,
       pathParameters: {'step': '$step'},
@@ -72,8 +78,8 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
     );
   }
 
-  void _exit() {
-    store.save();
+  Future<void> _exit() async {
+    if (!await store.save() || !mounted) return;
     if (context.canPop()) {
       context.pop();
     } else {
@@ -81,20 +87,20 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
     }
   }
 
-  void _back() {
+  Future<void> _back() async {
     if (widget.review) {
-      _go(9);
+      await _go(9);
     } else if (store.step > 1) {
-      _go(store.step - 1);
+      await _go(store.step - 1);
     } else {
-      _exit();
+      await _exit();
     }
   }
 
   Future<void> _next() async {
-    if (!store.next()) return;
+    if (!await store.next()) return;
     if (store.step < 9) {
-      _go(widget.review ? 9 : store.step + 1);
+      await _go(widget.review ? 9 : store.step + 1);
       return;
     }
     final id = await store.submit();
@@ -194,7 +200,7 @@ class _SubmissionScreenState extends State<SubmissionScreen> {
   Widget _page() => PopScope(
     canPop: false,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _back();
+      if (!didPop) unawaited(_back());
     },
     child: AppPage(
       title: 'Step ${store.draft.step} of 9',

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:developify_mobile/app/app.dart';
@@ -5,6 +7,7 @@ import 'package:developify_mobile/app/di/app_dependencies.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/core/widgets/app_button.dart';
+import 'package:developify_mobile/core/storage/picked_local_file.dart';
 import 'package:developify_mobile/features/landowner/domain/landowner_repository.dart';
 import 'package:developify_mobile/features/landowner/domain/submission_draft.dart';
 import 'package:developify_mobile/features/landowner/presentation/submission_screen.dart';
@@ -150,7 +153,7 @@ void main() {
       ('16960', 9, 1607.0, true, false),
     ]) {
       viewport(tester, height);
-      repo.saveDraft(
+      await repo.saveDraft(
         _draft(
           frame,
           step,
@@ -160,7 +163,7 @@ void main() {
         ),
       );
       if (frame == '18155') {
-        repo.saveDraft(
+        await repo.saveDraft(
           repo
               .readDraft(frame)
               .copyWith(
@@ -209,7 +212,7 @@ void main() {
       );
       deps.session.signIn(user);
       final repo = deps.container<LandownerRepository>();
-      repo.saveDraft(
+      await repo.saveDraft(
         _draft(
           'interaction',
           4,
@@ -263,10 +266,22 @@ void main() {
       expect(screen().store.draft.hasValuation, false);
       await tester.tap(find.byType(SubmissionValuationSwitch));
       await tester.pumpAndSettle();
+      screen().store.addDocument('valuation');
+      await tester.pumpAndSettle();
       expect(screen().store.draft.documents.containsKey('valuation'), true);
+      await tester.ensureVisible(find.widgetWithText(AppButton, 'Continue'));
+      expect(
+        tester
+            .widget<AppButton>(find.widgetWithText(AppButton, 'Continue'))
+            .onPressed,
+        isNotNull,
+      );
       await tester.tap(find.widgetWithText(AppButton, 'Continue'));
       await tester.pumpAndSettle();
-      expect(screen().store.step, 9);
+      expect(
+        screen().store.step,
+        9,
+      );
       await tester.tap(find.text('Edit').first);
       await tester.pumpAndSettle();
       expect(screen().review, true);
@@ -284,7 +299,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(screen().store.draft.photos.length, 3);
       expect(screen().store.validateStep(3)['photos'], isNotNull);
-      await tester.tap(find.byType(DashedPhotoTile).last);
+      final upload = screen().store.uploadPhoto(
+        PickedLocalFile(
+          name: 'West boundary.jpg',
+          mimeType: 'image/jpeg',
+          bytes: base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII=',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(await upload, isTrue);
       await tester.pumpAndSettle();
       expect(screen().store.draft.photos.length, 4);
       viewport(tester, 780, 360);

@@ -4,57 +4,6 @@ PODS:
       - FlutterMacOS
   - integration_test (0.0.1):
       - Flutter
-  - onesignal_flutter (5.7.0):
-      - Flutter
-      - OneSignalXCFramework (= 5.7.0)
-  - OneSignalXCFramework (5.7.0):
-      - OneSignalXCFramework/OneSignalComplete (= 5.7.0)
-  - OneSignalXCFramework/OneSignal (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalExtension
-      - OneSignalXCFramework/OneSignalLiveActivities
-      - OneSignalXCFramework/OneSignalNotifications
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalOutcomes
-      - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalComplete (5.7.0):
-      - OneSignalXCFramework/OneSignal
-      - OneSignalXCFramework/OneSignalInAppMessages
-      - OneSignalXCFramework/OneSignalLocation
-  - OneSignalXCFramework/OneSignalExtension (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalOutcomes
-  - OneSignalXCFramework/OneSignalInAppMessages (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalNotifications
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalOutcomes
-      - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalLiveActivities (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalLocation (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalNotifications
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalNotifications (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalExtension
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalOutcomes
-  - OneSignalXCFramework/OneSignalOSCore (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-  - OneSignalXCFramework/OneSignalOutcomes (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalOSCore
-  - OneSignalXCFramework/OneSignalUser (5.7.0):
-      - OneSignalXCFramework/OneSignalCore
-      - OneSignalXCFramework/OneSignalNotifications
-      - OneSignalXCFramework/OneSignalOSCore
-      - OneSignalXCFramework/OneSignalOutcomes
   - shared_preferences_foundation (0.0.1):
       - Flutter
       - FlutterMacOS
@@ -64,31 +13,23 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
-  - onesignal_flutter (from `.symlinks/plugins/onesignal_flutter/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
-SPEC REPOS:
-  trunk:
-    - OneSignalXCFramework
 EXTERNAL SOURCES:
   Flutter:
-    ':path': Flutter
+    :path: Flutter
   flutter_secure_storage_darwin:
-    ':path': .symlinks/plugins/flutter_secure_storage_darwin/darwin
+    :path: .symlinks/plugins/flutter_secure_storage_darwin/darwin
   integration_test:
-    ':path': .symlinks/plugins/integration_test/ios
-  onesignal_flutter:
-    ':path': .symlinks/plugins/onesignal_flutter/ios
+    :path: .symlinks/plugins/integration_test/ios
   shared_preferences_foundation:
-    ':path': .symlinks/plugins/shared_preferences_foundation/darwin
+    :path: .symlinks/plugins/shared_preferences_foundation/darwin
   url_launcher_ios:
-    ':path': .symlinks/plugins/url_launcher_ios/ios
+    :path: .symlinks/plugins/url_launcher_ios/ios
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage_darwin: 557817588b80e60213cbecb573c45c76b788018d
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
-  onesignal_flutter: 617d054791ddb205e3d8797eb117ce6298e02f35
-  OneSignalXCFramework: dd6233dcd93b0a4ef9c5046e8278e367e94d5215
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   url_launcher_ios: bb13df5870e8c4234ca12609d04010a21be43dfa
 PODFILE CHECKSUM: d29b6ee4f05ec041803bc1c88867f8989185d7a0

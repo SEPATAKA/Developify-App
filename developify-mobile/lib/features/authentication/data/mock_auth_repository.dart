@@ -8,12 +8,14 @@ import 'package:developify_mobile/features/shared/domain/app_user.dart';
 import 'package:developify_mobile/features/authentication/domain/landowner_registration.dart';
 
 final class MockAuthRepository implements AuthRepository {
-  MockAuthRepository(this.behavior);
+  MockAuthRepository(
+    this.behavior, {
+    this.emailVerificationPending = false,
+  });
 
   final MockBehavior behavior;
-
   @override
-  bool get emailVerificationPending => false;
+  final bool emailVerificationPending;
 
   @override
   bool get usesEmailVerificationLink => false;
@@ -240,6 +242,16 @@ final class MockAuthRepository implements AuthRepository {
 
     if (error != null) {
       return Future.value(Failure(AppFailure(FailureKind.validation, error)));
+    }
+    if (emailVerificationPending) {
+      return Future.value(
+        const Failure(
+          AppFailure(
+            FailureKind.unauthenticated,
+            'Check your email for the Supabase verification link.',
+          ),
+        ),
+      );
     }
 
     return behavior.run(() {

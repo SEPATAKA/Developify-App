@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:developify_mobile/app/di/app_dependencies.dart';
 import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/app/router/route_names.dart';
-import 'package:developify_mobile/core/services/push_notification_service.dart';
 import 'package:developify_mobile/core/theme/app_theme.dart';
 import 'package:developify_mobile/features/authentication/domain/auth_repository.dart';
 
@@ -21,23 +20,11 @@ class DevelopifyApp extends StatefulWidget {
 class _DevelopifyAppState extends State<DevelopifyApp> {
   late final GoRouter _router =
       widget.router ?? createAppRouter(widget.dependencies);
-  StreamSubscription<PushTarget>? _pushTaps;
   StreamSubscription<void>? _passwordRecovery;
-  String? _externalId;
   @override
   void initState() {
     super.initState();
     widget.dependencies.session.startExpiryMonitoring();
-    // TODO: Retain validated taps until authenticated entity scope and router
-    // readiness are confirmed; see docs/OBSERVABILITY_AND_NOTIFICATIONS.md.
-    _pushTaps = widget.dependencies.push.taps.listen((target) {
-      switch (target.destination) {
-        case PushDestination.notifications:
-          _router.goNamed(Routes.notifications);
-        case PushDestination.property:
-          _router.goNamed(Routes.property, pathParameters: {'id': target.id!});
-      }
-    });
     final authRepository = widget.dependencies.container<AuthRepository>();
     _passwordRecovery = authRepository.passwordRecoveryEvents.listen((_) {
       _router.goNamed(
@@ -53,25 +40,11 @@ class _DevelopifyAppState extends State<DevelopifyApp> {
         ),
       );
     }
-    widget.dependencies.session.addListener(_syncPushIdentity);
-  }
-
-  void _syncPushIdentity() {
-    final id = widget.dependencies.session.user?.id;
-    if (_externalId == id) return;
-    _externalId = id;
-    if (id == null) {
-      unawaited(widget.dependencies.push.removeExternalUserId());
-    } else {
-      unawaited(widget.dependencies.push.setExternalUserId(id));
-    }
   }
 
   @override
   void dispose() {
     widget.dependencies.session.stopExpiryMonitoring();
-    widget.dependencies.session.removeListener(_syncPushIdentity);
-    unawaited(_pushTaps?.cancel());
     unawaited(_passwordRecovery?.cancel());
     if (widget.router == null) _router.dispose();
     super.dispose();
