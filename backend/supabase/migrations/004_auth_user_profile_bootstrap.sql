@@ -107,10 +107,21 @@ $$;
 revoke all on function public.developify_bootstrap_auth_user_profile()
   from public, anon, authenticated;
 
-drop trigger if exists developify_auth_user_profile_bootstrap on auth.users;
-create trigger developify_auth_user_profile_bootstrap
-after insert on auth.users
-for each row execute function public.developify_bootstrap_auth_user_profile();
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_trigger
+    where tgname = 'developify_auth_user_profile_bootstrap'
+      and tgrelid = 'auth.users'::regclass
+      and not tgisinternal
+  ) then
+    execute 'create trigger developify_auth_user_profile_bootstrap
+      after insert on auth.users
+      for each row execute function public.developify_bootstrap_auth_user_profile()';
+  end if;
+end;
+$$;
 
 insert into public.developify_migrations (version)
 values ('004_auth_user_profile_bootstrap')
