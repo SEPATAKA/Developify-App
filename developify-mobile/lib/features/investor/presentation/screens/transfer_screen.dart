@@ -97,6 +97,8 @@ class _TransferScreenState extends State<TransferScreen> {
       );
     }
     if (store.stage == TransferStage.method) {
+      final depositsAvailable =
+          store.cardPaymentsEnabled || store.bankTransferAvailable;
       return InvestorPage(
         title: 'Add funds',
         onBack: _back,
@@ -105,14 +107,18 @@ class _TransferScreenState extends State<TransferScreen> {
           children: [
             SizedBox(height: 18.w),
             Text(
-              store.cardPaymentsEnabled
-                  ? 'Choose how to add funds'
-                  : 'Add funds by bank transfer',
+              depositsAvailable
+                  ? store.cardPaymentsEnabled
+                        ? 'Choose how to add funds'
+                        : 'Add funds by bank transfer'
+                  : 'Deposits temporarily unavailable',
               style: AppTextStyles.heading,
             ),
             SizedBox(height: 17.w),
             Text(
-              store.cardPaymentsEnabled
+              !depositsAvailable
+                  ? 'Card checkout and a verified bank settlement account are not configured. Please contact support.'
+                  : store.cardPaymentsEnabled
                   ? store.supportsManualEft
                         ? 'Pay by card in Paystack’s secure test checkout, or request a manual bank transfer. Your wallet is credited only after payment is confirmed.'
                         : 'Pay by card or try a demo bank transfer. Demo transactions do not move real money.'
@@ -196,6 +202,10 @@ class _TransferScreenState extends State<TransferScreen> {
         child: EmptyPaymentMethods(
           withdrawal: withdrawal,
           manualEft: store.supportsManualEft,
+          paymentsUnavailable:
+              !withdrawal &&
+              !store.cardPaymentsEnabled &&
+              !store.supportsManualEft,
           onAdd: _addMethod,
         ),
       );
@@ -387,7 +397,7 @@ class _TransferScreenState extends State<TransferScreen> {
           ? 'Recording withdrawal'
           : 'Processing your request',
       processingMessage: withdrawal
-          ? store.supportsManualEft
+          ? store.usesLivePayments
                 ? 'Please wait while we submit your withdrawal for admin approval.'
                 : 'Please wait while we record this simulated withdrawal.'
           : store.supportsManualEft &&
@@ -435,13 +445,13 @@ class _TransferScreenState extends State<TransferScreen> {
     final message = !success
         ? store.error ?? 'Please try again.'
         : withdrawal
-        ? store.supportsManualEft
+        ? store.usesLivePayments
               ? isPending
                     ? '${Money.amount(store.amount!)} withdrawal request submitted to ${destination?.name ?? 'your bank account'}${destination == null ? '' : ' • ${destination.lastFour}'}. It is pending admin approval; the amount and fee are reserved from your wallet.'
                     : '${Money.amount(store.received)} withdrawal sent to ${destination?.name ?? 'your bank account'}${destination == null ? '' : ' • ${destination.lastFour}'}.'
               : '${Money.amount(store.received)} simulated withdrawal to ${destination?.name ?? 'the selected bank'}${destination == null ? '' : ' • ${destination.lastFour}'}. No money was moved.'
         : liveManualDeposit && isPending && instructions != null
-        ? 'Deposit request pending. Transfer ${Money.amount(manualDepositAmount!)} to ${instructions.bank}, account ${instructions.accountNumber}, branch ${instructions.branchCode}. Use reference ${instructions.reference}. Your wallet is credited after admin confirmation.'
+        ? 'Deposit request pending. Transfer ${Money.amount(manualDepositAmount!)} to ${instructions.bank}, account name ${instructions.accountName}, account ${instructions.accountNumber}, branch ${instructions.branchCode}. Use reference ${instructions.reference}. Your wallet is credited after admin confirmation.'
         : liveManualDeposit && isPending
         ? 'This deposit request is still pending. Check the transaction details or contact support for its bank-transfer reference before sending funds.'
         : paystackDeposit
@@ -484,7 +494,7 @@ class _TransferScreenState extends State<TransferScreen> {
           : 'Try again',
       secondary: success
           ? withdrawal
-                ? store.supportsManualEft && isPending
+                ? store.usesLivePayments && isPending
                       ? 'View Request'
                       : 'View Receipt'
                 : liveManualDeposit

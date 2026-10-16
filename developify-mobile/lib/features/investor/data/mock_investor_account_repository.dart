@@ -64,6 +64,9 @@ final class MockInvestorAccountRepository implements InvestorAccountRepository {
   };
 
   @override
+  bool get usesLivePayments => false;
+
+  @override
   bool get supportsManualEft => false;
 
   @override

@@ -9,10 +9,12 @@ class EmptyPaymentMethods extends StatelessWidget {
     required this.withdrawal,
     required this.onAdd,
     this.manualEft = false,
+    this.paymentsUnavailable = false,
   });
   final bool withdrawal;
   final VoidCallback onAdd;
   final bool manualEft;
+  final bool paymentsUnavailable;
   @override
   Widget build(BuildContext context) => ListView(
     children: [
@@ -22,7 +24,9 @@ class EmptyPaymentMethods extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              withdrawal || manualEft
+              paymentsUnavailable
+                  ? 'Deposits temporarily unavailable'
+                  : withdrawal || manualEft
                   ? 'No bank accounts added'
                   : 'No Cards Added Yet',
               textAlign: TextAlign.center,
@@ -34,6 +38,8 @@ class EmptyPaymentMethods extends StatelessWidget {
                   ? 'Add a bank account for withdrawals.'
                   : manualEft
                   ? 'Add a bank account to request a manual EFT deposit.'
+                  : paymentsUnavailable
+                  ? 'Card checkout and a verified bank settlement account are not configured. Please contact support.'
                   : "You haven't added any cards yet. Add a card to start making payments and managing your transactions.",
               textAlign: TextAlign.center,
               style: AppTextStyles.body,
@@ -41,11 +47,13 @@ class EmptyPaymentMethods extends StatelessWidget {
           ],
         ),
       ),
-      SizedBox(height: 35.w),
-      AppButton(
-        label: withdrawal || manualEft ? 'Add Bank Account' : 'Add Card',
-        onPressed: onAdd,
-      ),
+      if (!paymentsUnavailable) ...[
+        SizedBox(height: 35.w),
+        AppButton(
+          label: withdrawal || manualEft ? 'Add Bank Account' : 'Add Card',
+          onPressed: onAdd,
+        ),
+      ],
       SizedBox(height: 24.w),
     ],
   );

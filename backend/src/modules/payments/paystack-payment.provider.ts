@@ -19,6 +19,25 @@ export type PaystackDeposit = {
 export class PaystackPaymentProvider {
   constructor(private readonly config: ConfigService) {}
 
+  get isConfigured(): boolean {
+    const secret = this.config.get<string>('PAYSTACK_SECRET_KEY')?.trim();
+    const configured = this.config.get<string>('PAYSTACK_CALLBACK_URL')?.trim();
+    const publicUrl = this.config.get<string>('API_PUBLIC_URL')?.trim();
+
+    if (!secret?.startsWith('sk_test_')) return false;
+
+    try {
+      const callbackUrl =
+        configured ||
+        (publicUrl
+          ? new URL('/v1/wallet/paystack/callback', publicUrl).toString()
+          : '');
+      return Boolean(callbackUrl && new URL(callbackUrl).protocol === 'https:');
+    } catch {
+      return false;
+    }
+  }
+
   private get secretKey(): string {
     const secret = this.config.get<string>('PAYSTACK_SECRET_KEY')?.trim();
     if (!secret?.startsWith('sk_test_')) {
@@ -32,21 +51,21 @@ export class PaystackPaymentProvider {
   private get callbackUrl(): string {
     const configured = this.config.get<string>('PAYSTACK_CALLBACK_URL')?.trim();
     const publicUrl = this.config.get<string>('API_PUBLIC_URL')?.trim();
-    const value =
-      configured ||
-      (publicUrl
-        ? new URL('/v1/wallet/paystack/callback', publicUrl).toString()
-        : '');
-    if (!value) {
-      throw new ServiceUnavailableException(
-        'Configure PAYSTACK_CALLBACK_URL or API_PUBLIC_URL before accepting card payments.',
-      );
-    }
     try {
+      const derivedUrl = publicUrl
+        ? new URL('/v1/wallet/paystack/callback', publicUrl).toString()
+        : undefined;
+      const value = configured ?? derivedUrl;
+      if (!value) {
+        throw new ServiceUnavailableException(
+          'Configure PAYSTACK_CALLBACK_URL or API_PUBLIC_URL before accepting card payments.',
+        );
+      }
       const url = new URL(value);
       if (url.protocol !== 'https:') throw new Error();
       return url.toString();
-    } catch {
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
       throw new ServiceUnavailableException(
         'PAYSTACK_CALLBACK_URL must be a valid HTTPS URL.',
       );

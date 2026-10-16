@@ -21,6 +21,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
   final _pendingDepositChecks = <String>{};
   bool _balanceVisible = true;
   bool _cardPaymentsEnabled = false;
+  bool _manualEftEnabled = false;
   bool _disposed = false;
   InvestorAccountSnapshot? _snapshot;
   int _sequence = 0;
@@ -29,12 +30,15 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
 
   @override
   Set<PaymentMethodKind> get supportedPaymentMethods => {
-    PaymentMethodKind.bankAccount,
+    if (_manualEftEnabled) PaymentMethodKind.bankAccount,
     if (_cardPaymentsEnabled) PaymentMethodKind.card,
   };
 
   @override
-  bool get supportsManualEft => true;
+  bool get usesLivePayments => true;
+
+  @override
+  bool get supportsManualEft => _manualEftEnabled;
 
   @override
   bool get allowsDemoBiometricAuthorization => false;
@@ -198,6 +202,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
     final map = json as Map<String, Object?>? ?? const {};
     final available = (map['availableCents'] as num?)?.toInt() ?? 0;
     _cardPaymentsEnabled = map['cardPaymentsEnabled'] == true;
+    _manualEftEnabled = map['manualEftEnabled'] == true;
     final verificationName =
         map['verificationStatus'] as String? ?? 'incomplete';
     return InvestorAccountSnapshot(
@@ -381,6 +386,7 @@ final class ApiInvestorAccountRepository implements InvestorAccountRepository {
           ? null
           : InvestorPaymentInstructions(
               bank: instructions['bank'] as String? ?? '',
+              accountName: instructions['accountName'] as String? ?? '',
               accountNumber: instructions['accountNumber'] as String? ?? '',
               branchCode: instructions['branchCode'] as String? ?? '',
               reference: instructions['reference'] as String? ?? '',

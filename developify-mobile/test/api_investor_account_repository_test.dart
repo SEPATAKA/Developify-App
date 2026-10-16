@@ -20,6 +20,8 @@ class PaymentAdapter implements HttpClientAdapter {
   int snapshotBalanceCents = 0;
   List<Object> snapshotInvestments = const [];
   String transactionStatus = 'pending';
+  bool cardPaymentsEnabled = true;
+  bool manualEftEnabled = true;
 
   @override
   Future<ResponseBody> fetch(
@@ -54,6 +56,7 @@ class PaymentAdapter implements HttpClientAdapter {
             'status': 'pending',
             'instructions': {
               'bank': 'Developify Holdings',
+              'accountName': 'Developify Merchant',
               'accountNumber': '6284190219',
               'branchCode': '250655',
               'reference': 'INV-1234',
@@ -80,7 +83,8 @@ class PaymentAdapter implements HttpClientAdapter {
         : {
             'availableCents': snapshotBalanceCents,
             'verificationStatus': 'verified',
-            'cardPaymentsEnabled': true,
+            'cardPaymentsEnabled': cardPaymentsEnabled,
+            'manualEftEnabled': manualEftEnabled,
             'investments': snapshotInvestments,
             'transactions': <Object>[],
             'notifications': <Object>[],
@@ -221,6 +225,7 @@ void main() {
       expect(receipt.status, InvestorTransactionStatus.pending);
       expect(receipt.paymentInstructions?.reference, 'INV-1234');
       expect(receipt.paymentInstructions?.amountCents, 25000);
+      expect(receipt.paymentInstructions?.accountName, 'Developify Merchant');
       expect((await changes).kinds, {InvestorDataKind.transactions});
       expect(adapter.requests.map((request) => request.uri.path), [
         '/v1/wallet/add-money',
@@ -321,6 +326,7 @@ void main() {
         PaymentMethodKind.bankAccount,
         PaymentMethodKind.card,
       });
+      expect(repository.usesLivePayments, isTrue);
       expect(repository.supportsManualEft, isTrue);
       final snapshot = (result as Success<InvestorAccountSnapshot>).value;
       expect(
@@ -333,8 +339,11 @@ void main() {
   test(
     'Live card setup is unavailable without transmitting card details',
     () async {
+      await repository.snapshot();
+
       expect(repository.supportedPaymentMethods, {
         PaymentMethodKind.bankAccount,
+        PaymentMethodKind.card,
       });
       expect(repository.supportsManualEft, isTrue);
       expect(repository.allowsDemoBiometricAuthorization, isFalse);
@@ -347,7 +356,22 @@ void main() {
       );
 
       expect(result, isA<Failure<InvestorPaymentMethod>>());
-      expect(adapter.requests, isEmpty);
+      expect(adapter.requests, hasLength(1));
+      expect(adapter.requests.single.data, isNull);
+    },
+  );
+
+  test(
+    'live deposits are unavailable when neither provider is configured',
+    () async {
+      adapter.cardPaymentsEnabled = false;
+      adapter.manualEftEnabled = false;
+
+      await repository.snapshot();
+
+      expect(repository.supportedPaymentMethods, isEmpty);
+      expect(repository.usesLivePayments, isTrue);
+      expect(repository.supportsManualEft, isFalse);
     },
   );
 }

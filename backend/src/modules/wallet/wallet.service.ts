@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
@@ -63,10 +64,7 @@ export class WalletService {
     };
   }
 
-  private async mapInvestment(
-    id: string,
-    investment: DocumentData,
-  ) {
+  private async mapInvestment(id: string, investment: DocumentData) {
     const [project, milestones] = await Promise.all([
       this.documents.collection('projects').doc(investment.projectId).get(),
       this.documents
@@ -208,6 +206,7 @@ export class WalletService {
       heldPrincipalCents,
       currency: 'ZAR',
       cardPaymentsEnabled: this.payments.cardPaymentsEnabled,
+      manualEftEnabled: this.payments.manualEftEnabled,
       investments: await Promise.all(
         investments.map(({ id, data }) => this.mapInvestment(id, data)),
       ),
@@ -233,12 +232,6 @@ export class WalletService {
         createdAt: documentDate(data.createdAt).toISOString(),
         payload: data.payload ?? {},
       })),
-      depositInstructions: {
-        bank: 'Developify Holdings',
-        accountNumber: '6284190219',
-        branchCode: '250655',
-        holder: 'Developify Holding',
-      },
     };
   }
 
@@ -306,10 +299,18 @@ export class WalletService {
         'Complete verification before funding your wallet.',
       );
     }
-    const paystackCard =
-      input.methodId === PAYSTACK_CARD_METHOD_ID &&
-      this.payments.cardPaymentsEnabled;
+    const paystackCard = input.methodId === PAYSTACK_CARD_METHOD_ID;
+    if (paystackCard && !this.payments.cardPaymentsEnabled) {
+      throw new ServiceUnavailableException(
+        'Card deposits are unavailable. Configure Paystack test credentials and a public HTTPS callback.',
+      );
+    }
     if (!paystackCard) {
+      if (!this.payments.manualEftEnabled) {
+        throw new ServiceUnavailableException(
+          'Bank deposits are unavailable until verified settlement account details are configured.',
+        );
+      }
       const method = await this.documents
         .collection('paymentMethods')
         .doc(input.methodId)
@@ -584,6 +585,11 @@ export class WalletService {
     const initialData = initial.data();
     if (!initialData || initialData.kind !== TransactionKind.topUp) {
       throw new NotFoundException('Deposit not found.');
+    }
+    if (initialData.methodId === PAYSTACK_CARD_METHOD_ID) {
+      throw new BadRequestException(
+        'Card deposits must be verified directly with Paystack.',
+      );
     }
     return this.creditDeposit(transactionRef, initialData, adminId);
   }

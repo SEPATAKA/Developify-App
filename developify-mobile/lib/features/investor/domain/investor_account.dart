@@ -116,6 +116,7 @@ abstract final class InvestorDepositAccount {
 final class InvestorPaymentInstructions {
   const InvestorPaymentInstructions({
     required this.bank,
+    required this.accountName,
     required this.accountNumber,
     required this.branchCode,
     required this.reference,
@@ -124,6 +125,7 @@ final class InvestorPaymentInstructions {
   });
 
   final String bank;
+  final String accountName;
   final String accountNumber;
   final String branchCode;
   final String reference;

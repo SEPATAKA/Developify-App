@@ -33,6 +33,34 @@ describe('PaystackPaymentProvider', () => {
     );
   });
 
+  it('is configured only with a test key and a valid HTTPS callback', () => {
+    expect(provider.isConfigured).toBe(true);
+    expect(
+      new PaystackPaymentProvider(
+        new ConfigService({
+          PAYSTACK_SECRET_KEY: secretKey,
+          PAYSTACK_CALLBACK_URL: 'http://localhost/callback',
+        }),
+      ).isConfigured,
+    ).toBe(false);
+    expect(
+      new PaystackPaymentProvider(
+        new ConfigService({
+          PAYSTACK_SECRET_KEY: 'sk_live_example',
+          PAYSTACK_CALLBACK_URL: 'https://api.example.test/callback',
+        }),
+      ).isConfigured,
+    ).toBe(false);
+    expect(
+      new PaystackPaymentProvider(
+        new ConfigService({
+          PAYSTACK_SECRET_KEY: secretKey,
+          API_PUBLIC_URL: 'not-a-valid-url',
+        }),
+      ).isConfigured,
+    ).toBe(false);
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
   });

@@ -4,7 +4,7 @@ import { PaystackPaymentProvider } from './paystack-payment.provider';
 
 export const PAYSTACK_CARD_METHOD_ID = 'paystack-card-checkout';
 
-/** Phase-1 manual EFT payment provider. Swap for Paystack later. */
+/** Manual EFT provider with administrator-confirmed settlement. */
 export interface PaymentProvider {
   readonly name: string;
   initiateDeposit(input: {
@@ -29,6 +29,28 @@ export interface PaymentProvider {
 export class ManualPaymentProvider implements PaymentProvider {
   readonly name = 'manual';
 
+  constructor(private readonly config: ConfigService) {}
+
+  private get depositAccount() {
+    const bank = this.config.get<string>('DEPOSIT_BANK_NAME')?.trim();
+    const accountName = this.config
+      .get<string>('DEPOSIT_BANK_ACCOUNT_NAME')
+      ?.trim();
+    const accountNumber = this.config
+      .get<string>('DEPOSIT_BANK_ACCOUNT_NUMBER')
+      ?.trim();
+    const branchCode = this.config
+      .get<string>('DEPOSIT_BANK_BRANCH_CODE')
+      ?.trim();
+    return bank && accountName && accountNumber && branchCode
+      ? { bank, accountName, accountNumber, branchCode }
+      : null;
+  }
+
+  get isConfigured(): boolean {
+    return this.depositAccount !== null;
+  }
+
   async initiateDeposit(input: {
     amountCents: bigint;
     reference: string;
@@ -36,15 +58,19 @@ export class ManualPaymentProvider implements PaymentProvider {
     transactionId: string;
     email: string;
   }) {
+    const account = this.depositAccount;
+    if (!account) {
+      throw new ServiceUnavailableException(
+        'Manual bank deposits are unavailable until verified settlement account details are configured.',
+      );
+    }
     return {
       status: 'pending' as const,
       instructions: {
-        bank: 'Developify Holdings',
-        accountNumber: '6284190219',
-        branchCode: '250655',
+        ...account,
         reference: input.reference,
         amountCents: String(input.amountCents),
-        note: 'Upload proof or wait for admin confirmation.',
+        note: 'Use this reference. Wallet funds are added after the transfer is confirmed.',
       },
     };
   }
@@ -66,8 +92,18 @@ export class PaymentService {
     private readonly paystack: PaystackPaymentProvider,
   ) {}
 
+  private get providerName(): 'manual' | 'paystack' {
+    const provider = this.config.get<string>('PAYMENT_PROVIDER', 'manual');
+    if (provider !== 'manual' && provider !== 'paystack') {
+      throw new ServiceUnavailableException(
+        'PAYMENT_PROVIDER must be set to manual or paystack.',
+      );
+    }
+    return provider;
+  }
+
   get active(): PaymentProvider {
-    switch (this.config.get<string>('PAYMENT_PROVIDER', 'manual')) {
+    switch (this.providerName) {
       case 'manual':
         return this.manual;
       case 'paystack':
@@ -76,15 +112,19 @@ export class PaymentService {
           initiateDeposit: (input) => this.paystack.initiateDeposit(input),
           initiateWithdrawal: (input) => this.manual.initiateWithdrawal(input),
         };
-      default:
-        throw new ServiceUnavailableException(
-          'PAYMENT_PROVIDER must be set to manual or paystack.',
-        );
     }
   }
 
   get cardPaymentsEnabled(): boolean {
-    return this.active.name === 'paystack';
+    return this.providerName === 'paystack' && this.paystack.isConfigured;
+  }
+
+  get manualEftEnabled(): boolean {
+    switch (this.providerName) {
+      case 'manual':
+      case 'paystack':
+        return this.manual.isConfigured;
+    }
   }
 
   get manualProvider(): ManualPaymentProvider {

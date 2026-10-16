@@ -59,6 +59,7 @@ abstract class TransferStoreBase with Store, Lifecycle {
   String? error;
   @observable
   InvestorOperationReceipt? receipt;
+  bool get usesLivePayments => _repository.usesLivePayments;
   bool get supportsManualEft => _repository.supportsManualEft;
   bool get bankTransferAvailable => _repository.supportedPaymentMethods
       .contains(PaymentMethodKind.bankAccount);
@@ -73,7 +74,10 @@ abstract class TransferStoreBase with Store, Lifecycle {
         : PaymentMethodKind.bankAccount;
     if (kind == InvestorTransferKind.topUp &&
         selectedKind == PaymentMethodKind.bankAccount &&
-        !_repository.supportsManualEft) {
+        !_repository.supportsManualEft &&
+        _repository.supportedPaymentMethods.contains(
+          PaymentMethodKind.bankAccount,
+        )) {
       return [InvestorDepositAccount.method];
     }
     return account?.paymentMethods
