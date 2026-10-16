@@ -629,7 +629,22 @@ export class SupabaseDataService {
         ) as Promise<QuerySnapshot>,
         transaction.get(counterRef) as Promise<DocumentSnapshot>,
       ]);
-      if (existingUser.exists || !duplicateEmail.empty) return false;
+      const isPendingSupabaseProfile =
+        existingUser.exists &&
+        existingUser.get('supabaseUid') === profile.uid &&
+        existingUser.get('registrationStatus') === 'pending_verification' &&
+        String(existingUser.get('email') ?? '')
+          .toLowerCase()
+          .trim() === normalizedEmail;
+      const hasOtherProfileWithEmail = duplicateEmail.docs.some(
+        (document) => document.id !== profile.uid,
+      );
+      if (
+        (existingUser.exists && !isPendingSupabaseProfile) ||
+        hasOtherProfileWithEmail
+      ) {
+        return false;
+      }
       let nextNumber =
         typeof counter.get('next') === 'number'
           ? counter.get('next')
@@ -653,7 +668,7 @@ export class SupabaseDataService {
         throw new Error('Could not allocate a unique investor number.');
       const now = new Date();
       transaction.set(counterRef, { next: nextNumber }, { merge: true });
-      transaction.create(userRef, {
+      const userProfile = {
         id: profile.uid,
         email: normalizedEmail,
         name: profile.name.trim(),
@@ -667,9 +682,15 @@ export class SupabaseDataService {
         locked: false,
         supabaseUid: profile.uid,
         authProvider: 'supabase',
-        createdAt: now,
+        registrationStatus: 'complete',
+        createdAt: existingUser.get('createdAt') ?? now,
         updatedAt: now,
-      });
+      };
+      if (isPendingSupabaseProfile) {
+        transaction.update(userRef, userProfile);
+      } else {
+        transaction.create(userRef, userProfile);
+      }
       for (const [index, experience] of profile.experiences.entries()) {
         transaction.create(membershipRefs[index], {
           id: membershipRefs[index].id,

@@ -8,8 +8,11 @@ import { AuthService } from './auth.service';
 import { SupabaseDataService } from '../../supabase/supabase-data.service';
 
 describe('AuthService Supabase signup profile completion', () => {
-  function serviceForMetadata(registration: Record<string, unknown> | null) {
-    let profile: Record<string, unknown> | null = null;
+  function serviceForMetadata(
+    registration: Record<string, unknown> | null,
+    initialProfile: Record<string, unknown> | null = null,
+  ) {
+    let profile: Record<string, unknown> | null = initialProfile;
     const createRegisteredUserProfile = jest.fn(
       async (
         value: Parameters<
@@ -86,6 +89,34 @@ describe('AuthService Supabase signup profile completion', () => {
         experiences: ['investor', 'landowner'],
       }),
     );
+  });
+
+  it('completes the pending profile created when Supabase accepted signup', async () => {
+    const { service, createRegisteredUserProfile } = serviceForMetadata(
+      {
+        type: 'landowner',
+        phone: '+27 821234567',
+        countryCode: 'ZA',
+        entity: 'individual',
+      },
+      {
+        id: 'verified-supabase-user',
+        email: 'investor@example.test',
+        supabaseUid: 'verified-supabase-user',
+        registrationStatus: 'pending_verification',
+      },
+    );
+
+    const session = await service.supabaseUserSession('verified-access-token');
+
+    expect(createRegisteredUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uid: 'verified-supabase-user',
+        email: 'investor@example.test',
+        experiences: ['landowner'],
+      }),
+    );
+    expect(session.user.experiences).toEqual(['landowner']);
   });
 
   it('does not create a profile for verified Supabase users without Developify signup metadata', async () => {

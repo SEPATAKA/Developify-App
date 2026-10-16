@@ -40,8 +40,11 @@ Firestore collection names are registered in
 Firestore document contents.
 Apply `supabase/migrations/001_initial_supabase.sql` and
 `supabase/migrations/002_atomic_document_operations.sql` and
-`supabase/migrations/003_register_firestore_collections.sql` in the Supabase
-SQL Editor before starting the backend. Authenticated uploads use the private
+`supabase/migrations/003_register_firestore_collections.sql` and
+`supabase/migrations/004_auth_user_profile_bootstrap.sql` in the Supabase SQL
+Editor before starting the backend. The auth-user trigger stores pending signup
+profile details in the `users` collection; the backend completes the profile
+and memberships after email verification. Authenticated uploads use the private
 `developify-private` Supabase Storage bucket; configure its name with
 `SUPABASE_STORAGE_BUCKET`.
 

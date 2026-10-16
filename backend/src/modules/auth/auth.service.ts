@@ -48,11 +48,13 @@ export class AuthService {
     }
 
     let profile = await this.supabase.findUserSessionProfile(email);
-    if (!profile) {
+    if (!profile || profile.registrationStatus === 'pending_verification') {
       const registration = this.registrationFromMetadata(identity, email);
       if (!registration) {
         throw new UnauthorizedException(
-          'No Developify user profile exists for this account.',
+          profile
+            ? 'The pending Developify profile is incomplete.'
+            : 'No Developify user profile exists for this account.',
         );
       }
       await this.createProfile(
