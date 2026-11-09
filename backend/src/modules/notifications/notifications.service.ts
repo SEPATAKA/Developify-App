@@ -14,17 +14,38 @@ import {
 export class NotificationsService {
   constructor(private readonly supabase: SupabaseDataService) {}
 
-  private toIso(value: unknown) {
-    if (value instanceof Date) return value.toISOString();
-    if (
-      typeof value === 'object' &&
-      value !== null &&
-      'toDate' in value &&
-      typeof value.toDate === 'function'
-    ) {
-      return (value.toDate() as Date).toISOString();
+  private toMillis(value: unknown) {
+    let milliseconds: number;
+    if (value instanceof Date) {
+      milliseconds = value.getTime();
+    } else if (typeof value === 'string') {
+      milliseconds = Date.parse(value);
+    } else if (typeof value === 'number') {
+      milliseconds = value;
+    } else if (typeof value === 'object' && value !== null) {
+      if ('toMillis' in value && typeof value.toMillis === 'function') {
+        milliseconds = value.toMillis() as number;
+      } else if ('toDate' in value && typeof value.toDate === 'function') {
+        const date = value.toDate();
+        milliseconds = date instanceof Date ? date.getTime() : Number.NaN;
+      } else {
+        milliseconds = Number.NaN;
+      }
+    } else {
+      milliseconds = Number.NaN;
     }
-    throw new Error('A notification record has an invalid createdAt value.');
+
+    if (
+      !Number.isFinite(milliseconds) ||
+      !Number.isFinite(new Date(milliseconds).getTime())
+    ) {
+      throw new Error('A notification record has an invalid createdAt value.');
+    }
+    return milliseconds;
+  }
+
+  private toIso(value: unknown) {
+    return new Date(this.toMillis(value)).toISOString();
   }
 
   private mapNotification(id: string, data: DocumentData) {
@@ -48,7 +69,8 @@ export class NotificationsService {
     return rows.docs
       .sort(
         (left, right) =>
-          right.get('createdAt').toMillis() - left.get('createdAt').toMillis(),
+          this.toMillis(right.get('createdAt')) -
+          this.toMillis(left.get('createdAt')),
       )
       .map((notification) =>
         this.mapNotification(notification.id, notification.data()),
@@ -94,7 +116,8 @@ export class NotificationsService {
     return rows.docs
       .sort(
         (left, right) =>
-          left.get('createdAt').toMillis() - right.get('createdAt').toMillis(),
+          this.toMillis(left.get('createdAt')) -
+          this.toMillis(right.get('createdAt')),
       )
       .map((message) => ({
         id: message.id,
@@ -179,7 +202,8 @@ export class NotificationsService {
     return rows.docs
       .sort(
         (left, right) =>
-          left.get('createdAt').toMillis() - right.get('createdAt').toMillis(),
+          this.toMillis(left.get('createdAt')) -
+          this.toMillis(right.get('createdAt')),
       )
       .map((message) => ({
         id: message.id,

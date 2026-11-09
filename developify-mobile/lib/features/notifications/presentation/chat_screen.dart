@@ -48,13 +48,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _input.text = widget.store.draft;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scroll.hasClients) {
-        unawaited(
-          _scroll.animateTo(
-            _scroll.position.maxScrollExtent,
-            duration: AppDurations.motion(context, AppDurations.state),
-            curve: Curves.easeOut,
-          ),
-        );
+        final destination = _scroll.position.maxScrollExtent;
+        final duration = AppDurations.motion(context, AppDurations.state);
+        if (duration == Duration.zero) {
+          _scroll.jumpTo(destination);
+        } else {
+          unawaited(
+            _scroll.animateTo(
+              destination,
+              duration: duration,
+              curve: Curves.easeOut,
+            ),
+          );
+        }
       }
     });
   }
