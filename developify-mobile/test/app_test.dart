@@ -120,43 +120,40 @@ void main() {
       await deps.dispose();
     },
   );
-  testWidgets(
-    'Supabase recovery callback can reset a password with an authenticated session',
-    (tester) async {
-      tester.view.physicalSize = const Size(393, 852);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final deps = await AppDependencies.create(
-        environment: const AppEnvironment(mockDelay: Duration.zero),
-      );
-      deps.session.signIn(
-        const AppUser(
-          id: 'recovery-user',
-          name: 'Recovery User',
-          email: 'recovery@example.test',
-        ),
-      );
-      final router = createAppRouter(
-        deps,
-        initialLocation: '/forgot-password?reset=true',
-      );
-      await tester.pumpWidget(
-        DevelopifyApp(dependencies: deps, router: router),
-      );
-      await tester.pumpAndSettle();
+  testWidgets('Password recovery callback opens the reset-password step', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final deps = await AppDependencies.create(
+      environment: const AppEnvironment(mockDelay: Duration.zero),
+    );
+    deps.session.signIn(
+      const AppUser(
+        id: 'recovery-user',
+        name: 'Recovery User',
+        email: 'recovery@example.test',
+      ),
+    );
+    final router = createAppRouter(
+      deps,
+      initialLocation: '/auth-callback/?flow=password-recovery',
+    );
+    await tester.pumpWidget(DevelopifyApp(dependencies: deps, router: router));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(RecoveryScreen), findsOneWidget);
-      expect(
-        tester.widget<RecoveryScreen>(find.byType(RecoveryScreen)).store.stage,
-        2,
-      );
+    expect(find.byType(RecoveryScreen), findsOneWidget);
+    expect(
+      tester.widget<RecoveryScreen>(find.byType(RecoveryScreen)).store.stage,
+      2,
+    );
 
-      await tester.pumpWidget(const SizedBox());
-      router.dispose();
-      await deps.dispose();
-    },
-  );
+    await tester.pumpWidget(const SizedBox());
+    router.dispose();
+    await deps.dispose();
+  });
   testWidgets('Primary routes render at the inspected 393 by 852 size', (
     tester,
   ) async {

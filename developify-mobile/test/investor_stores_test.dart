@@ -644,4 +644,38 @@ void main() {
       expect((await snapshot()).transactions, isEmpty);
     },
   );
+
+  test(
+    'Signup skips email verification and signs in after security setup',
+    () async {
+      session.signOut();
+      final auth = MockAuthRepository(
+        MockBehavior(delay: Duration.zero),
+        skipEmailVerification: true,
+      );
+      final store = own(InvestorSignupStore(auth, session, authorization));
+      for (final entry in {
+        'name': 'New Investor',
+        'email': 'new@example.test',
+        'phone': '821234567',
+        'password': 'SafePassword1!',
+        'confirmation': 'SafePassword1!',
+      }.entries) {
+        store.edit(entry.key, entry.value);
+      }
+
+      expect(await store.createProfile(), true);
+      expect(store.stage, InvestorSignupStage.pin);
+      expect(session.isAuthenticated, false);
+      store.setPin('9876');
+      expect(store.continuePin(), true);
+      store.continueBiometrics();
+      store.completeSecurity();
+
+      expect(await store.finish(), true);
+      expect(session.isAuthenticated, true);
+      expect(session.experience, Experience.investor);
+      expect(session.user!.email, 'new@example.test');
+    },
+  );
 }

@@ -284,7 +284,7 @@ export class AdminController {
   @Get('config')
   async config() {
     const snapshot = await this.supabase.documents
-      .collection('systemConfig')
+      .collection('systemConfigs')
       .get();
     return snapshot.docs.map((doc) => ({ key: doc.id, ...doc.data() }));
   }
@@ -296,7 +296,7 @@ export class AdminController {
       throw new BadRequestException('Configuration key is invalid.');
     }
     const reference = this.supabase.documents
-      .collection('systemConfig')
+      .collection('systemConfigs')
       .doc(key);
     await reference.set(
       { value: body.value, updatedAt: new Date() },

@@ -133,6 +133,50 @@ mixin _$AuthStore on AuthStoreBase, Store {
     });
   }
 
+  late final _$emailVerificationRequiredAtom = Atom(
+    name: 'AuthStoreBase.emailVerificationRequired',
+    context: context,
+  );
+
+  @override
+  bool get emailVerificationRequired {
+    _$emailVerificationRequiredAtom.reportRead();
+    return super.emailVerificationRequired;
+  }
+
+  @override
+  set emailVerificationRequired(bool value) {
+    _$emailVerificationRequiredAtom.reportWrite(
+      value,
+      super.emailVerificationRequired,
+      () {
+        super.emailVerificationRequired = value;
+      },
+    );
+  }
+
+  late final _$verificationLinkSentAtom = Atom(
+    name: 'AuthStoreBase.verificationLinkSent',
+    context: context,
+  );
+
+  @override
+  bool get verificationLinkSent {
+    _$verificationLinkSentAtom.reportRead();
+    return super.verificationLinkSent;
+  }
+
+  @override
+  set verificationLinkSent(bool value) {
+    _$verificationLinkSentAtom.reportWrite(
+      value,
+      super.verificationLinkSent,
+      () {
+        super.verificationLinkSent = value;
+      },
+    );
+  }
+
   late final _$signInAsyncAction = AsyncAction(
     'AuthStoreBase.signIn',
     context: context,
@@ -142,6 +186,18 @@ mixin _$AuthStore on AuthStoreBase, Store {
   Future<bool> signIn({String? socialProvider}) {
     return _$signInAsyncAction.run(
       () => super.signIn(socialProvider: socialProvider),
+    );
+  }
+
+  late final _$resendVerificationEmailAsyncAction = AsyncAction(
+    'AuthStoreBase.resendVerificationEmail',
+    context: context,
+  );
+
+  @override
+  Future<bool> resendVerificationEmail() {
+    return _$resendVerificationEmailAsyncAction.run(
+      () => super.resendVerificationEmail(),
     );
   }
 
@@ -207,6 +263,8 @@ passwordVisible: ${passwordVisible},
 submitted: ${submitted},
 status: ${status},
 error: ${error},
+emailVerificationRequired: ${emailVerificationRequired},
+verificationLinkSent: ${verificationLinkSent},
 emailError: ${emailError},
 passwordError: ${passwordError},
 canSubmit: ${canSubmit}

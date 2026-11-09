@@ -54,30 +54,55 @@ void main() {
       session.dispose();
     },
   );
-  test('Landowner signup reports pending email verification as success', () async {
-    final session = SessionService();
-    final store = SignupStore(
-      MockAuthRepository(behavior(), emailVerificationPending: true),
-      session,
+  test('Unverified mobile login can resend its verification email', () async {
+    final repository = MockAuthRepository(
+      behavior(),
+      signInFailure: const AppFailure(
+        FailureKind.emailVerificationRequired,
+        'Verify your email, then sign in again.',
+      ),
     );
-    store.setName('Amina Dlamini');
-    store.setEmail('amina@example.test');
-    store.setPhone('8200000000');
-    store.setPassword('Password1');
-    store.setConfirmation('Password1');
-    store.acceptTerms(true);
-    expect(store.continueToEntity(), true);
-    store.selectEntity(EntityType.individual);
+    final session = SessionService();
+    final store = AuthStore(repository, session);
+    store.setEmail('landowner@example.test');
+    store.setPassword('password1');
 
-    expect(await store.createAccount(), true);
-    expect(store.status, LoadStatus.success);
-    expect(store.verificationSent, true);
-    expect(store.error, isNull);
-    expect(session.isAuthenticated, false);
+    expect(await store.signIn(), false);
+    expect(store.emailVerificationRequired, true);
+    expect(await store.resendVerificationEmail(), true);
+    expect(repository.lastVerificationEmail, 'landowner@example.test');
+    expect(store.verificationLinkSent, true);
 
     store.dispose();
     session.dispose();
   });
+  test(
+    'Landowner signup reports pending email verification as success',
+    () async {
+      final session = SessionService();
+      final store = SignupStore(
+        MockAuthRepository(behavior(), emailVerificationPending: true),
+        session,
+      );
+      store.setName('Amina Dlamini');
+      store.setEmail('amina@example.test');
+      store.setPhone('8200000000');
+      store.setPassword('Password1');
+      store.setConfirmation('Password1');
+      store.acceptTerms(true);
+      expect(store.continueToEntity(), true);
+      store.selectEntity(EntityType.individual);
+
+      expect(await store.createAccount(), true);
+      expect(store.status, LoadStatus.success);
+      expect(store.verificationSent, true);
+      expect(store.error, isNull);
+      expect(session.isAuthenticated, false);
+
+      store.dispose();
+      session.dispose();
+    },
+  );
   test('Disposed async stores ignore late results', () async {
     final store = HomeStore(MockLandownerRepository(behavior()));
     final pending = store.load();
@@ -88,7 +113,8 @@ void main() {
   test(
     'Recovery rejects wrong codes and password mismatch, then completes',
     () async {
-      final store = RecoveryStore(MockAuthRepository(behavior()));
+      final session = SessionService();
+      final store = RecoveryStore(MockAuthRepository(behavior()), session);
       store.setEmail('landowner@example.test');
       await store.submit();
       expect(store.stage, 1);
@@ -104,7 +130,12 @@ void main() {
       expect(await store.submit(), false);
       store.setConfirmation('new-password');
       expect(await store.submit(), true);
+      expect(session.isAuthenticated, false);
+      store.completeSignIn();
+      expect(session.isAuthenticated, true);
+      expect(session.experience, Experience.landowner);
       store.dispose();
+      session.dispose();
     },
   );
   for (final empty in [false, true]) {

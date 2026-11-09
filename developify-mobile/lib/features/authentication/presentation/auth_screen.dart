@@ -301,7 +301,44 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       ),
-      Observer(builder: (_) => InlineError(widget.store.error)),
+      Observer(
+        builder: (_) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InlineError(widget.store.error),
+            if (widget.store.emailVerificationRequired)
+              InkWell(
+                key: const ValueKey('auth-resend-verification'),
+                onTap: widget.store.status == LoadStatus.loading
+                    ? null
+                    : widget.store.resendVerificationEmail,
+                child: SizedBox(
+                  height: 44.w,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Resend verification email',
+                      style: AppTextStyles.text(
+                        16,
+                        weight: FontWeight.w600,
+                        color: AppColors.primary,
+                        height: 19 / 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.store.verificationLinkSent)
+              Padding(
+                padding: EdgeInsets.only(top: 8.w),
+                child: Text(
+                  'Verification email sent. Check your inbox and spam folder.',
+                  style: AppTextStyles.text(14, color: AppColors.primary),
+                ),
+              ),
+          ],
+        ),
+      ),
       SizedBox(height: (widget.returning ? 34.5 : 9.5).w),
       Padding(
         padding: EdgeInsets.only(right: widget.returning ? 0 : 2.w),

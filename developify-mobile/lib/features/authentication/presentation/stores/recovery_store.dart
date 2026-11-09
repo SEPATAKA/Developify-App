@@ -1,17 +1,26 @@
 import 'dart:async';
 import 'package:mobx/mobx.dart';
 import 'package:developify_mobile/core/errors/result.dart';
+import 'package:developify_mobile/core/services/session_service.dart';
 import 'package:developify_mobile/core/utils/lifecycle.dart';
 import 'package:developify_mobile/core/utils/validation.dart';
 import 'package:developify_mobile/features/authentication/domain/auth_repository.dart';
+import 'package:developify_mobile/features/shared/domain/app_user.dart';
 
 part 'recovery_store.g.dart';
 
 class RecoveryStore = RecoveryStoreBase with _$RecoveryStore;
 
 abstract class RecoveryStoreBase with Store, Lifecycle {
-  RecoveryStoreBase(this._repository);
+  RecoveryStoreBase(
+    this._repository,
+    this._session, {
+    this.experience = Experience.landowner,
+  });
   final AuthRepository _repository;
+  final SessionService _session;
+  final Experience experience;
+  AppUser? _completedUser;
   bool get usesSupabaseRecovery => _repository.usesEmailVerificationLink;
   Timer? _timer;
   @observable
@@ -196,10 +205,19 @@ abstract class RecoveryStoreBase with Store, Lifecycle {
         submitted = false;
         return false;
       }
+      if (result case Success<AppUser>(:final value)) _completedUser = value;
       password = '';
       confirmation = '';
       return true;
     });
+  }
+
+  void completeSignIn() {
+    if (isDisposed) return;
+    final user = _completedUser;
+    if (user == null) return;
+    _completedUser = null;
+    _session.signIn(user, experience: experience);
   }
 
   @action

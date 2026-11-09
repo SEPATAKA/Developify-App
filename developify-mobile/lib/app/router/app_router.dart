@@ -143,8 +143,10 @@ GoRouter createAppRouter(
           path == '/investor/privacy' ||
           path == '/investor/onboarding-terms';
       final passwordReset =
-          path == '/forgot-password' &&
-          state.uri.queryParameters['reset'] == 'true';
+          (path == '/forgot-password' &&
+              state.uri.queryParameters['reset'] == 'true') ||
+          (path == '/auth-callback' &&
+              state.uri.queryParameters['flow'] == 'password-recovery');
       if (session.isAuthenticated &&
           publicPaths.contains(path) &&
           !legal &&
@@ -255,7 +257,10 @@ GoRouter createAppRouter(
           context,
           'auth-callback',
           state.pageKey,
-          const AuthCallbackScreen(),
+          AuthCallbackScreen(
+            isPasswordRecovery:
+                state.uri.queryParameters['flow'] == 'password-recovery',
+          ),
         ),
       ),
       StatefulShellRoute.indexedStack(

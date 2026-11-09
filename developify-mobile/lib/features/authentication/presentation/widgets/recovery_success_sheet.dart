@@ -70,7 +70,7 @@ class RecoverySuccessSheet extends StatelessWidget {
                     SizedBox(
                       width: 322.612.w,
                       child: Text(
-                        'Congratulations! Your Password is Changed.',
+                        'Your password has been changed.',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.text(
                           29.32836,
@@ -83,7 +83,7 @@ class RecoverySuccessSheet extends StatelessWidget {
                     SizedBox(
                       width: 295.239.w,
                       child: Text(
-                        'Your password has been successfully updated. You can now log in with your new password.',
+                        'Your password has been updated and you are now signed in.',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.text(
                           16,
@@ -102,7 +102,7 @@ class RecoverySuccessSheet extends StatelessWidget {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 12.w),
               child: AppButton(
-                label: 'Login Now',
+                label: 'Continue to your account',
                 onPressed: () => Navigator.pop(context),
               ),
             ),

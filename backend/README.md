@@ -32,21 +32,52 @@ Supabase access tokens. Configure `SUPABASE_URL` and the server-only
 `SUPABASE_SERVICE_ROLE_KEY` in the backend environment. The service-role key
 must never be sent to the mobile client or committed.
 
-Application documents retain their collection/document structure in
-`public.developify_documents`, with JSONB payloads and indexes. Financial
-operations use the `developify_commit` database function for atomic writes.
-Firestore collection names are registered in
-`public.developify_collection_versions`; this does not copy the legacy
-Firestore document contents.
-Apply `supabase/migrations/001_initial_supabase.sql` and
-`supabase/migrations/002_atomic_document_operations.sql` and
-`supabase/migrations/003_register_firestore_collections.sql` and
-`supabase/migrations/004_auth_user_profile_bootstrap.sql` in the Supabase SQL
-Editor before starting the backend. The auth-user trigger stores pending signup
-profile details in the `users` collection; the backend completes the profile
-and memberships after email verification. Authenticated uploads use the private
-`developify-private` Supabase Storage bucket; configure its name with
-`SUPABASE_STORAGE_BUCKET`.
+Application documents are stored in the physical PostgreSQL tables listed in
+`supabase/migrations/003_register_firestore_collections.sql`. Each table stores
+the Firestore document ID and JSONB fields; `scope` preserves nested collection
+paths such as `users/{userId}/searchHistories`. Row-level security is enabled,
+and only the backend service role can access the tables. Financial operations
+and data imports use the `developify_commit` database function for atomic
+writes. The original `developify_documents` table is retained as a backup
+after migration 006 copies its registered documents into the physical tables.
+
+Apply migrations `001_initial_supabase.sql` through
+`006_physical_firestore_collections.sql` in numeric order in the Supabase SQL
+Editor before starting the backend. Migration 005 aligns the prior config and
+search-history names; migration 006 creates the physical tables, migrates
+existing Supabase documents, updates atomic writes, and moves auth profile
+bootstrap to the `users` table. Supabase Auth remains the authority for
+authentication and refresh tokens; corresponding Firestore collection tables
+are private and populated by the requested import.
+
+### Importing Firestore data
+
+The local import command reads Firestore project `developify-5615a` with a
+Firebase service-account JSON file and writes documents to Supabase using the
+backend service-role key. Keep both credentials local and never commit or paste
+them into chat:
+
+1. Apply migrations 001–006 in Supabase.
+2. Save an authorized Firebase service-account JSON file as
+   `backend/credentials/firebase-service-account.json` (or set
+   `FIREBASE_SERVICE_ACCOUNT_PATH` in `backend/.env` to its local path).
+3. Set `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`.
+4. From `backend`, run `npm run import:firestore -- --dry-run` to count source
+   documents without writing them.
+5. Run `npm run import:firestore` to import. The command reports per-collection
+   counts and does not print document values. It copies registered collection
+   names, including nested collections, in batches; Firestore collection names
+   not in the 32-name allowlist are skipped and reported. Re-running the import
+   upserts documents by their original collection path and document ID.
+
+The Firebase credential must have read access to Firestore. The Supabase
+service-role key is server-only and must not be added to mobile or admin client
+configuration. Supabase Storage uses the private `developify-private` bucket;
+configure its name with `SUPABASE_STORAGE_BUCKET`.
+
+The auth-user trigger stores pending signup profile details in the `users`
+table; the backend completes the profile and memberships after email
+verification.
 
 ## Project setup
 

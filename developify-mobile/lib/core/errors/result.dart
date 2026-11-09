@@ -3,6 +3,7 @@ enum FailureKind {
   network,
   timeout,
   unauthenticated,
+  emailVerificationRequired,
   forbidden,
   notFound,
   server,

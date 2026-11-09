@@ -25,6 +25,9 @@ final class ApiAuthRepository implements AuthRepository {
   static String get _authCallback => kIsWeb
       ? Uri.base.resolve('/auth-callback/').toString()
       : 'developify://auth-callback/';
+  static String get _recoveryCallback => kIsWeb
+      ? Uri.base.resolve('/auth-callback/?flow=password-recovery').toString()
+      : 'developify://auth-callback/?flow=password-recovery';
 
   final ApiClient _client;
   final TokenStorage _tokens;
@@ -43,7 +46,11 @@ final class ApiAuthRepository implements AuthRepository {
   bool get usesEmailVerificationLink => true;
 
   @override
-  bool get passwordRecoveryPending => _passwordRecoveryPending;
+  bool get passwordRecoveryPending =>
+      _passwordRecoveryPending ||
+      (kIsWeb &&
+          Uri.base.queryParameters['flow'] == 'password-recovery' &&
+          supabase.auth.currentSession != null);
 
   @override
   String? get recoveryEmail =>
@@ -118,7 +125,7 @@ final class ApiAuthRepository implements AuthRepository {
       );
     }
     try {
-      await supabase.auth.signUp(
+      final response = await supabase.auth.signUp(
         email: registration.email.trim(),
         password: registration.password,
         emailRedirectTo: _authCallback,
@@ -142,8 +149,18 @@ final class ApiAuthRepository implements AuthRepository {
           },
         },
       );
+      final user = response.user;
+      if (user == null) {
+        return const Failure(
+          AppFailure(
+            FailureKind.unauthenticated,
+            'Supabase did not return a registered investor account.',
+          ),
+        );
+      }
       _pendingInvestorRegistration = registration;
-      _emailVerificationPending = true;
+      _emailVerificationPending =
+          response.session == null || user.emailConfirmedAt == null;
       return const Success(_investorChallenge);
     } on AuthException catch (error) {
       return Failure(_authFailure(error, registration: true));
@@ -305,7 +322,9 @@ final class ApiAuthRepository implements AuthRepository {
       _
           when raw.contains('invalid login credentials') ||
               raw.contains('invalid credentials') =>
-        'Invalid email or password. If this account was migrated, use Forgot Password to set a Supabase password.',
+        registration
+            ? 'An account already uses this email. If you cannot sign in, use Forgot Password, then return to create your profile.'
+            : 'Invalid email or password. If this account was migrated, use Forgot Password to set a Supabase password.',
       _ when raw.contains('password') && raw.contains('least') =>
         'Choose a stronger password.',
       _ when raw.contains('email') && raw.contains('valid') =>
@@ -319,7 +338,7 @@ final class ApiAuthRepository implements AuthRepository {
       _ when raw.contains('too many') || raw.contains('rate limit') =>
         'Too many attempts. Please wait and try again.',
       _ when raw.contains('not confirmed') =>
-        'Verify your email using the link we sent, then sign in again.',
+        'Verify your email, then sign in again. You can resend the verification link below.',
       _ =>
         registration
             ? 'Supabase account creation failed. Check your connection and try again.'
@@ -327,9 +346,12 @@ final class ApiAuthRepository implements AuthRepository {
     };
     final kind = switch (true) {
       _ when raw.contains('network') => FailureKind.network,
-      _ when raw.contains('not authorized') ||
-          (raw.contains('redirect') && raw.contains('url')) ||
-          (raw.contains('signup') && raw.contains('disabled')) =>
+      _ when raw.contains('not confirmed') =>
+        FailureKind.emailVerificationRequired,
+      _
+          when raw.contains('not authorized') ||
+              (raw.contains('redirect') && raw.contains('url')) ||
+              (raw.contains('signup') && raw.contains('disabled')) =>
         FailureKind.configuration,
       _ => FailureKind.unauthenticated,
     };
@@ -389,6 +411,9 @@ final class ApiAuthRepository implements AuthRepository {
         );
       }
       _pendingLandownerRegistration = registration;
+      if (user.identities?.isEmpty ?? false) {
+        return _completeExistingLandownerSignup(registration);
+      }
       if (token == null || user.emailConfirmedAt == null) {
         _emailVerificationPending = true;
         return const Failure(
@@ -398,33 +423,116 @@ final class ApiAuthRepository implements AuthRepository {
           ),
         );
       }
-      final result = await _client.request<Object?>(
-        path: '/v1/auth/register/landowner',
-        method: 'POST',
-        authenticated: false,
-        data: {
-          'name': registration.name.trim(),
-          'email': registration.email.trim(),
-          'phone': registration.phone,
-          'countryCode': 'ZA',
-          'entity': registration.entity.name,
-          'idToken': token,
-        },
-        decode: (json) => json,
-      );
-      if (result case Success(:final value)) {
+      final result = await _createLandownerProfile(registration, token);
+      if (result case Success()) {
         _pendingLandownerRegistration = null;
         _emailVerificationPending = false;
-        return Success(_user((value as Map<String, Object?>)['user']));
       }
-      return result as Failure<AppUser>;
+      return result;
     } on AuthException catch (error) {
+      if (error.message.toLowerCase().contains('already registered') ||
+          error.message.toLowerCase().contains('already been registered')) {
+        _pendingLandownerRegistration = registration;
+        return _completeExistingLandownerSignup(registration);
+      }
       return Failure(_authFailure(error, registration: true));
     } on Object {
       return const Failure(
         AppFailure(FailureKind.network, 'Could not register with Supabase.'),
       );
     }
+  }
+
+  Future<Result<AppUser>> _completeExistingLandownerSignup(
+    LandownerRegistration registration,
+  ) async {
+    try {
+      final existing = await supabase.auth.signInWithPassword(
+        email: registration.email.trim(),
+        password: registration.password,
+      );
+      final user = existing.user;
+      final token = existing.session?.accessToken;
+      if (user == null || token == null) {
+        return const Failure(
+          AppFailure(
+            FailureKind.unauthenticated,
+            'Supabase did not return a signed-in user.',
+          ),
+        );
+      }
+      if (user.emailConfirmedAt == null) {
+        return _resendExistingLandownerVerification(registration);
+      }
+      final session = await _loadApiSession(token);
+      if (session case Success()) {
+        _pendingLandownerRegistration = null;
+        _emailVerificationPending = false;
+        return session;
+      }
+      if (session case Failure(:final error)
+          when error.message !=
+              'Your email is verified, but your Developify profile is missing. Please contact support to restore your account.') {
+        return session;
+      }
+      final result = await _createLandownerProfile(registration, token);
+      if (result case Success()) {
+        _pendingLandownerRegistration = null;
+        _emailVerificationPending = false;
+      }
+      return result;
+    } on AuthException catch (error) {
+      if (error.message.toLowerCase().contains('not confirmed')) {
+        return _resendExistingLandownerVerification(registration);
+      }
+      return Failure(_authFailure(error, registration: true));
+    }
+  }
+
+  Future<Result<AppUser>> _resendExistingLandownerVerification(
+    LandownerRegistration registration,
+  ) async {
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: registration.email.trim(),
+        emailRedirectTo: _authCallback,
+      );
+      _emailVerificationPending = true;
+      return const Failure(
+        AppFailure(
+          FailureKind.emailVerificationRequired,
+          'A verification email was sent. Open its link, then return to finish creating your profile.',
+        ),
+      );
+    } on AuthException catch (error) {
+      return Failure(_authFailure(error, registration: true));
+    }
+  }
+
+  Future<Result<AppUser>> _createLandownerProfile(
+    LandownerRegistration registration,
+    String token,
+  ) async {
+    final result = await _client.request<Object?>(
+      path: '/v1/auth/register/landowner',
+      method: 'POST',
+      authenticated: false,
+      data: {
+        'name': registration.name.trim(),
+        'email': registration.email.trim(),
+        'phone': registration.phone,
+        'countryCode': 'ZA',
+        'entity': registration.entity.name,
+        'idToken': token,
+      },
+      decode: (json) => json,
+    );
+    if (result case Success(:final value)) {
+      final response = Map<String, Object?>.from(value as Map);
+      return Success(_user(response['user']));
+    }
+    return result as Failure<AppUser>;
   }
 
   @override
@@ -448,8 +556,8 @@ final class ApiAuthRepository implements AuthRepository {
         await supabase.auth.signOut();
         return const Failure(
           AppFailure(
-            FailureKind.unauthenticated,
-            'Verify your email using the link we sent, then sign in again.',
+            FailureKind.emailVerificationRequired,
+            'Verify your email, then sign in again. You can resend the verification link below.',
           ),
         );
       }
@@ -477,12 +585,33 @@ final class ApiAuthRepository implements AuthRepository {
         }
         return registered as Failure<AppUser>;
       }
-      return _loadApiSession(token);
+      return await _loadApiSession(token);
     } on AuthException catch (error) {
       return Failure(_authFailure(error));
     } on Object {
       return const Failure(
         AppFailure(FailureKind.network, 'Could not sign in with Supabase.'),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> resendEmailVerification(String email) async {
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: email.trim(),
+        emailRedirectTo: _authCallback,
+      );
+      return const Success(null);
+    } on AuthException catch (error) {
+      return Failure(_authFailure(error));
+    } on Object {
+      return const Failure(
+        AppFailure(
+          FailureKind.network,
+          'Could not resend the Supabase verification email.',
+        ),
       );
     }
   }
@@ -521,7 +650,7 @@ final class ApiAuthRepository implements AuthRepository {
     try {
       await supabase.auth.resetPasswordForEmail(
         normalizedEmail,
-        redirectTo: _authCallback,
+        redirectTo: _recoveryCallback,
       );
       _recoveryEmail = normalizedEmail;
       return const Success(null);
@@ -568,25 +697,41 @@ final class ApiAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> resetPassword(String password) async {
+  Future<Result<AppUser>> resetPassword(String password) async {
     if (supabase.auth.currentSession == null) {
       return const Failure(
-        AppFailure(FailureKind.validation, 'Verify the recovery code first.'),
+        AppFailure(FailureKind.validation, 'Verify the recovery link first.'),
       );
     }
     try {
       await supabase.auth.updateUser(UserAttributes(password: password));
-      _passwordRecoveryPending = false;
+      final token = _accessToken;
+      if (token == null) {
+        await supabase.auth.signOut();
+        return const Failure(
+          AppFailure(
+            FailureKind.unauthenticated,
+            'Your password was changed, but the sign-in session expired. Sign in with your new password.',
+          ),
+        );
+      }
+      final profile = await _loadApiSession(token);
+      if (profile case Success()) {
+        _passwordRecoveryPending = false;
+        _recoveryEmail = null;
+        return profile;
+      }
       await supabase.auth.signOut();
+      _passwordRecoveryPending = false;
       _recoveryEmail = null;
-      return const Success(null);
+      return profile;
     } on AuthException catch (error) {
       return Failure(_authFailure(error));
     } on Object {
       return const Failure(
         AppFailure(
           FailureKind.network,
-          'Could not update the Supabase password.',
+          'Could not finish password reset. Check your connection and try again.',
         ),
       );
     }

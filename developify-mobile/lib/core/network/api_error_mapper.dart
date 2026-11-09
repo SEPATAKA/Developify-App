@@ -12,7 +12,7 @@ abstract final class ApiErrorMapper {
     if (message is! String) return null;
     return switch (message) {
       'Verify your email address before signing in.' =>
-        'Verify your email using the link we sent, then sign in again.',
+        'Verify your email, then sign in again. You can resend the verification link below.',
       'No Developify user profile exists for this account.' =>
         'Your email is verified, but your Developify profile is missing. Please contact support to restore your account.',
       'This Developify account is unavailable.' =>
@@ -57,7 +57,10 @@ abstract final class ApiErrorMapper {
       ),
       DioExceptionType.badResponse => switch (status) {
         401 => AppFailure(
-          FailureKind.unauthenticated,
+          _authSessionMessage(error) ==
+                  'Verify your email, then sign in again. You can resend the verification link below.'
+              ? FailureKind.emailVerificationRequired
+              : FailureKind.unauthenticated,
           _authSessionMessage(error) ?? 'Please sign in again.',
           statusCode: 401,
         ),

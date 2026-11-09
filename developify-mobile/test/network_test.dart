@@ -217,6 +217,23 @@ void main() {
 
   test('Supabase session failures explain known account states safely', () {
     final request = RequestOptions(path: '/v1/auth/supabase/session');
+    final unverified = ApiErrorMapper.map(
+      DioException(
+        requestOptions: request,
+        response: Response(
+          requestOptions: request,
+          statusCode: 401,
+          data: {'message': 'Verify your email address before signing in.'},
+        ),
+        type: DioExceptionType.badResponse,
+      ),
+    );
+    expect(unverified.kind, FailureKind.emailVerificationRequired);
+    expect(
+      unverified.message,
+      'Verify your email, then sign in again. You can resend the verification link below.',
+    );
+
     final missingProfile = ApiErrorMapper.map(
       DioException(
         requestOptions: request,

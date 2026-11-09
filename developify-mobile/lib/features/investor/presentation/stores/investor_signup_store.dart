@@ -258,10 +258,15 @@ abstract class InvestorSignupStoreBase with Store, Lifecycle {
         return false;
       }
       _challenge = (result as Success<String>).value;
-      stage = InvestorSignupStage.verification;
       code = '';
       codeRejected = false;
-      _countdown();
+      if (_repository.usesEmailVerificationLink &&
+          !_repository.emailVerificationPending) {
+        stage = InvestorSignupStage.pin;
+      } else {
+        stage = InvestorSignupStage.verification;
+        _countdown();
+      }
       return true;
     });
   }

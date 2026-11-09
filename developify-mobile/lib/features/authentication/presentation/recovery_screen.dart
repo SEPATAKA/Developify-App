@@ -83,7 +83,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     _password.clear();
     _confirmation.clear();
     await showRecoverySuccessSheet(context);
-    if (mounted) context.goNamed('${widget.routePrefix}${Routes.signIn}');
+    if (mounted) {
+      widget.store.completeSignIn();
+      context.goNamed('${widget.routePrefix}${Routes.home}');
+    }
   }
 
   @override
@@ -182,7 +185,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               store.stage == 0
                   ? 'Enter the email address linked to your account to receive a secure Supabase recovery code or link and regain access to your account.'
                   : store.stage == 1
-                  ? 'Enter the Supabase recovery code sent to ${store.maskedEmail}.'
+                  ? 'Enter the 6-digit code or open its reset link.'
                   : 'Choose a new password for ${store.maskedEmail}.',
               style: AppTextStyles.text(
                 16,
@@ -237,7 +240,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                         TextSpan(
                           text: store.resendSeconds > 0
                               ? 'Resend in 0:${store.resendSeconds.toString().padLeft(2, '0')}'
-                              : 'Resend code',
+                              : 'Resend link or code',
                           style: AppTextStyles.text(
                             16,
                             weight: FontWeight.w600,

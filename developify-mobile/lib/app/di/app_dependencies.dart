@@ -278,7 +278,10 @@ final class AppDependencies {
       () => SignupStore(get<AuthRepository>(), sessionService),
     );
     get.registerFactory<RecoveryStore>(
-      () => RecoveryStore(get<AuthRepository>()),
+      () => RecoveryStore(
+        get<AuthRepository>(),
+        sessionService,
+      ),
     );
     get.registerFactory<HomeStore>(() => HomeStore(get<LandownerRepository>()));
     get.registerFactory<PropertiesStore>(

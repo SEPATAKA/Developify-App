@@ -7,8 +7,30 @@ import 'package:developify_mobile/core/theme/app_theme.dart';
 import 'package:developify_mobile/core/widgets/app_button.dart';
 import 'package:developify_mobile/core/widgets/app_chrome.dart';
 
-class AuthCallbackScreen extends StatelessWidget {
-  const AuthCallbackScreen({super.key});
+class AuthCallbackScreen extends StatefulWidget {
+  const AuthCallbackScreen({super.key, this.isPasswordRecovery = false});
+
+  final bool isPasswordRecovery;
+
+  @override
+  State<AuthCallbackScreen> createState() => _AuthCallbackScreenState();
+}
+
+class _AuthCallbackScreenState extends State<AuthCallbackScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isPasswordRecovery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.goNamed(
+            Routes.recovery,
+            queryParameters: const {'reset': 'true'},
+          );
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -21,7 +43,9 @@ class AuthCallbackScreen extends StatelessWidget {
           children: [
             SizedBox(height: 32.w),
             Text(
-              'Email verification',
+              widget.isPasswordRecovery
+                  ? 'Password reset'
+                  : 'Email verification',
               style: AppTextStyles.text(
                 30,
                 weight: FontWeight.w700,
@@ -30,19 +54,31 @@ class AuthCallbackScreen extends StatelessWidget {
             ),
             SizedBox(height: 12.w),
             Text(
-              'If you opened this page from a Supabase verification email, your email is confirmed. Sign in to finish creating your profile.',
+              widget.isPasswordRecovery
+                  ? 'Your recovery link was verified. Continue to set a new password.'
+                  : 'If you opened this page from a Supabase verification email, your email is confirmed. Sign in to finish creating your profile.',
               style: AppTextStyles.text(16, color: AppColors.muted),
             ),
             const Spacer(),
-            AppButton(
-              label: 'Continue as investor',
-              onPressed: () => context.goNamed(InvestorRoutes.signIn),
-            ),
-            SizedBox(height: 12.w),
-            AppButton(
-              label: 'Continue as landowner',
-              onPressed: () => context.goNamed(Routes.signIn),
-            ),
+            if (widget.isPasswordRecovery)
+              AppButton(
+                label: 'Set a new password',
+                onPressed: () => context.goNamed(
+                  Routes.recovery,
+                  queryParameters: const {'reset': 'true'},
+                ),
+              )
+            else ...[
+              AppButton(
+                label: 'Continue as investor',
+                onPressed: () => context.goNamed(InvestorRoutes.signIn),
+              ),
+              SizedBox(height: 12.w),
+              AppButton(
+                label: 'Continue as landowner',
+                onPressed: () => context.goNamed(Routes.signIn),
+              ),
+            ],
             SizedBox(height: 20.w),
           ],
         ),

@@ -128,7 +128,7 @@ export class CatalogService {
     await this.supabase.documents
       .collection('users')
       .doc(userId)
-      .collection('searchHistory')
+      .collection('searchHistories')
       .add({
         userId,
         query: normalizedQuery,
@@ -141,7 +141,7 @@ export class CatalogService {
     const rows = await this.supabase.documents
       .collection('users')
       .doc(userId)
-      .collection('searchHistory')
+      .collection('searchHistories')
       .orderBy('createdAt', 'desc')
       .limit(10)
       .get();

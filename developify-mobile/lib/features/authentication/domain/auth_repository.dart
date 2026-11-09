@@ -27,9 +27,10 @@ abstract interface class AuthRepository {
   void clearSession();
   Future<Result<AppUser>> registerLandowner(LandownerRegistration registration);
   Future<Result<AppUser>> signIn(String email, String password);
+  Future<Result<void>> resendEmailVerification(String email);
   Future<Result<AppUser>> socialSignIn(String provider);
   Future<Result<void>> requestRecovery(String email);
   Future<Result<void>> verifyRecovery(String code);
-  Future<Result<void>> resetPassword(String password);
+  Future<Result<AppUser>> resetPassword(String password);
   void dispose();
 }

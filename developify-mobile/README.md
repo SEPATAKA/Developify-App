@@ -1,6 +1,6 @@
 # Developify Mobile
 
-One Flutter application for **Investor and Landowner**, with shared authentication and portal switching. Application version **1.0.0+6**, source handover revision **r1**. The accepted UI includes the compact Investor calculator banner at standard and enlarged system text settings. Screens and domain journeys are implemented; repositories simulate data and financial operations. Production API integration, service configuration and distribution signing remain the receiving team's responsibility.
+One Flutter application for **Investor and Landowner**, with shared authentication and portal switching. Application version **1.0.0+6**, source handover revision **r1**. The accepted UI includes the compact Investor calculator banner at standard and enlarged system text settings. In live mode, authentication uses Supabase Auth and account and feature data use the configured backend API. Distribution signing remains the receiving team's responsibility.
 
 ## Quick start
 
@@ -10,16 +10,16 @@ Use **Flutter 3.44.4 stable / Dart 3.12.2**. Install the native prerequisites in
 flutter --version
 flutter pub get --enforce-lockfile
 dart run build_runner build
-flutter devices
-flutter run --target lib/main.dart \
-  --dart-define=MOCK_MODE=true \
-  --dart-define=MOCK_SCENARIO=success \
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 59497 \
+  --target lib/main.dart \
+  --dart-define=MOCK_MODE=false \
+  --dart-define=API_BASE_URL=http://127.0.0.1:3000 \
   --dart-define=TELEMETRY_ENABLED=false
 ```
 
-Select the Android emulator or iOS simulator when prompted, or add `-d DEVICE_ID` using an ID returned by `flutter devices`. Both portals are available in the app switcher; switching does not require another login. An authenticated cold restart starts on Investor Home.
+Start the backend from `backend/` before launching the app. This live configuration uses Supabase Auth and the backend's Supabase tables; landowner registration and subsequent sign-in use the shared `users` table. For an Android emulator, use `http://10.0.2.2:3000` as `API_BASE_URL`. Both portals are available in the app switcher; switching does not require another login. An authenticated cold restart starts on Investor Home.
 
-Mock-only sign-in: `landowner.qa@developify.co.za` / `Developify@123`. Recovery/verification code: `123456`. Seeded transaction PIN: `1234`. The mock accepts any valid email and nonempty password; these are convenient test inputs, not production credentials. A changed PIN lasts for the current user in the running process and resets on logout, user change or restart. Recovery does not create a real server password. Login restoration does not persist the simulated wallet, submissions or KYC data; see the [persistence matrix](docs/ARCHITECTURE.md#persistence-and-session-boundaries).
+Mock-only sign-in: `landowner.qa@developify.co.za` / `Developify@123`. Recovery/verification code: `123456`. Seeded transaction PIN: `1234`. These credentials and simulated records are available only when explicitly running with `MOCK_MODE=true`; they are not production credentials or Supabase accounts. A changed PIN lasts for the current user in the running process and resets on logout, user change or restart. Recovery does not create a real server password. Login restoration does not persist the simulated wallet, submissions or KYC data; see the [persistence matrix](docs/ARCHITECTURE.md#persistence-and-session-boundaries).
 
 ## Guides
 

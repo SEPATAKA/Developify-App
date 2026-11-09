@@ -11,6 +11,7 @@ import {
   type User,
 } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
+import { resolveCollectionTarget } from './collection-path';
 
 export type DocumentData = Record<string, any>;
 export type RegisteredUserProfile = {
@@ -32,6 +33,10 @@ type StoredDocument = {
   data: DocumentData;
   version: number;
 };
+export {
+  resolveCollectionTarget,
+  SUPABASE_COLLECTIONS,
+} from './collection-path';
 type ReadVersion =
   | { collection: string; id: string; version: number | null }
   | { collection: string; collection_version: number };
@@ -779,25 +784,29 @@ export class SupabaseDataService {
     collection: string,
     id: string,
   ): Promise<StoredDocument | null> {
+    const target = resolveCollectionTarget(collection);
     const result = await this.supabase
-      .from('developify_documents')
-      .select('collection,document_id,data,version')
-      .eq('collection', collection)
+      .from(target.tableName)
+      .select('document_id,data,version')
+      .eq('scope', target.scope)
       .eq('document_id', id)
       .maybeSingle();
     if (result.error) throw result.error;
-    return result.data as StoredDocument | null;
+    return result.data
+      ? ({ ...result.data, collection } as StoredDocument)
+      : null;
   }
 
   async readQuery(query: DocumentQuery): Promise<QuerySnapshot> {
     const { filters, ordering, limit, countOnly } = query.queryParameters();
+    const target = resolveCollectionTarget(query.collectionName);
     let request = this.supabase
-      .from('developify_documents')
+      .from(target.tableName)
       .select(
-        'collection,document_id,data,version',
+        'document_id,data,version',
         countOnly ? { count: 'exact', head: true } : undefined,
       )
-      .eq('collection', query.collectionName);
+      .eq('scope', target.scope);
     for (const filter of filters) {
       const field = `data->>${filter.field}`;
       if (filter.operator === '==') {
@@ -828,7 +837,7 @@ export class SupabaseDataService {
       return new QueryDocumentSnapshot(
         stored.document_id,
         stored.data,
-        new DocumentReference(this, stored.collection, stored.document_id),
+        new DocumentReference(this, query.collectionName, stored.document_id),
         stored.version,
       );
     });
@@ -836,10 +845,12 @@ export class SupabaseDataService {
   }
 
   async collectionVersion(collection: string) {
+    const target = resolveCollectionTarget(collection);
     const result = await this.supabase
       .from('developify_collection_versions')
       .select('version')
-      .eq('collection', collection)
+      .eq('collection', target.tableName)
+      .eq('scope', target.scope)
       .maybeSingle();
     if (result.error) throw result.error;
     return Number(result.data?.version ?? 0);

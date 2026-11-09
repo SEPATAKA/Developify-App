@@ -6,7 +6,6 @@ import 'package:developify_mobile/app/di/app_dependencies.dart';
 import 'package:developify_mobile/app/environment/app_environment.dart';
 import 'package:developify_mobile/app/router/app_router.dart';
 import 'package:developify_mobile/core/widgets/password_visibility_button.dart';
-import 'package:developify_mobile/features/authentication/presentation/auth_screen.dart';
 import 'package:developify_mobile/features/authentication/presentation/recovery_screen.dart';
 import 'package:developify_mobile/features/authentication/presentation/widgets/auth_social_button.dart';
 import 'package:developify_mobile/features/authentication/presentation/widgets/recovery_success_sheet.dart';
@@ -178,7 +177,7 @@ void main() {
       await tester.pump(const Duration(seconds: 49));
       await tester.pump();
       expect(store.resendSeconds, 0);
-      await tester.tap(find.textContaining('Resend code'));
+      await tester.tap(find.textContaining('Resend link or code'));
       await tester.pumpAndSettle();
       expect(store.code, isEmpty);
       expect(store.codeRejected, isFalse);
@@ -220,9 +219,10 @@ void main() {
         tester.getTopLeft(find.byType(RecoverySuccessSheet)).dy,
         closeTo(316, 1),
       );
-      await tester.tap(find.text('Login Now'));
+      await tester.tap(find.text('Continue to your account'));
       await tester.pumpAndSettle();
-      expect(find.byType(AuthScreen), findsOneWidget);
+      expect(router.routeInformationProvider.value.uri.path, '/home');
+      expect(deps.session.isAuthenticated, isTrue);
       expect(store.password, isEmpty);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

@@ -11,14 +11,19 @@ final class MockAuthRepository implements AuthRepository {
   MockAuthRepository(
     this.behavior, {
     this.emailVerificationPending = false,
+    this.signInFailure,
+    this.skipEmailVerification = false,
   });
 
   final MockBehavior behavior;
+  final bool skipEmailVerification;
   @override
   final bool emailVerificationPending;
+  final AppFailure? signInFailure;
+  String? lastVerificationEmail;
 
   @override
-  bool get usesEmailVerificationLink => false;
+  bool get usesEmailVerificationLink => skipEmailVerification;
 
   @override
   bool get passwordRecoveryPending => false;
@@ -88,6 +93,7 @@ final class MockAuthRepository implements AuthRepository {
         address: '',
         hasProfilePhoto: false,
       );
+      if (skipEmailVerification) _verifiedRegistrations.add(id);
 
       return id;
     }, cancellation: cancellation);
@@ -189,8 +195,22 @@ final class MockAuthRepository implements AuthRepository {
     if (error != null) {
       return Future.value(Failure(AppFailure(FailureKind.validation, error)));
     }
+    if (signInFailure != null) {
+      return Future.value(Failure(signInFailure!));
+    }
 
     return behavior.run(() => demoUser.copyWith(email: email.trim()));
+  }
+
+  @override
+  Future<Result<void>> resendEmailVerification(String email) async {
+    final error = Validation.email(email);
+    if (error != null) {
+      return Failure(AppFailure(FailureKind.validation, error));
+    }
+    return behavior.run(() {
+      lastVerificationEmail = email.trim();
+    });
   }
 
   @override
@@ -226,10 +246,10 @@ final class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<void>> resetPassword(String password) {
+  Future<Result<AppUser>> resetPassword(String password) {
     if (!_recoveryVerified) {
       return Future.value(
-        const Failure(
+        const Failure<AppUser>(
           AppFailure(
             FailureKind.validation,
             'Verify your recovery code first.',
@@ -241,11 +261,13 @@ final class MockAuthRepository implements AuthRepository {
     final error = Validation.password(password);
 
     if (error != null) {
-      return Future.value(Failure(AppFailure(FailureKind.validation, error)));
+      return Future.value(
+        Failure<AppUser>(AppFailure(FailureKind.validation, error)),
+      );
     }
     if (emailVerificationPending) {
       return Future.value(
-        const Failure(
+        const Failure<AppUser>(
           AppFailure(
             FailureKind.unauthenticated,
             'Check your email for the Supabase verification link.',
@@ -257,6 +279,7 @@ final class MockAuthRepository implements AuthRepository {
     return behavior.run(() {
       _recoveryRequested = false;
       _recoveryVerified = false;
+      return demoUser;
     });
   }
 }

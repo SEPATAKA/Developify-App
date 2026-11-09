@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export type AdminSession = {
   accessToken: string;
   admin: { id: string; email: string; name: string; role: string };
@@ -62,10 +64,31 @@ export async function api<T>(
   const session = getSession();
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
-  if (session?.accessToken) {
-    headers.set('Authorization', `Bearer ${session.accessToken}`);
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
+  if (sessionError) {
+    throw new Error(`Could not restore the admin session: ${sessionError.message}`);
   }
-  const res = await fetch(getApiUrl(path), { ...init, headers });
+  let accessToken = sessionData.session?.access_token ?? session?.accessToken;
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
+  const url = getApiUrl(path);
+  let res = await fetch(url, { ...init, headers });
+  if (res.status === 401 && session) {
+    const { data: refreshed, error } = await supabase.auth.refreshSession();
+    if (error || !refreshed.session) {
+      clearSession();
+      await supabase.auth.signOut();
+      throw new Error(
+        'Your admin session expired. Sign in again to continue.',
+      );
+    }
+    accessToken = refreshed.session.access_token;
+    setSession({ ...session, accessToken });
+    headers.set('Authorization', `Bearer ${accessToken}`);
+    res = await fetch(url, { ...init, headers });
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || `Request failed (${res.status})`);

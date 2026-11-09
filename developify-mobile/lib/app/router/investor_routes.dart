@@ -12,6 +12,7 @@ import 'package:developify_mobile/features/authentication/presentation/auth_scre
 import 'package:developify_mobile/features/authentication/presentation/recovery_screen.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/auth_store.dart';
 import 'package:developify_mobile/features/authentication/presentation/stores/recovery_store.dart';
+import 'package:developify_mobile/features/authentication/domain/auth_repository.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account.dart';
 import 'package:developify_mobile/features/investor/domain/investor_account_context.dart';
 import 'package:developify_mobile/features/investor/domain/investor_drafts.dart';
@@ -169,7 +170,11 @@ List<RouteBase> investorPublicRoutes(AppDependencies dependencies) {
       '/investor/forgot-password',
       (_, state) => _scope<RecoveryStore>(
         state: state,
-        create: () => get<RecoveryStore>(),
+        create: () => RecoveryStore(
+          get<AuthRepository>(),
+          dependencies.session,
+          experience: Experience.investor,
+        ),
         screenDisposes: true,
         builder: (_, store) =>
             RecoveryScreen(store: store, routePrefix: 'investor-'),

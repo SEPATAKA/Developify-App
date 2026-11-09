@@ -3,5 +3,7 @@ dist
 coverage
 .env
 .env.local
+credentials/
+*service-account*.json
 *.log
 .DS_Store

@@ -7,8 +7,8 @@ type ConfigRow = { id: string; key: string; value: unknown };
 
 export default function ConfigPage() {
   const [rows, setRows] = useState<ConfigRow[]>([]);
-  const [key, setKey] = useState('withdrawalFeeCents');
-  const [value, setValue] = useState('150');
+  const [key, setKey] = useState('');
+  const [value, setValue] = useState('');
   const [error, setError] = useState('');
 
   async function load() {
@@ -60,11 +60,15 @@ export default function ConfigPage() {
         <input
           className="w-full rounded border px-3 py-2 text-sm"
           value={key}
+          placeholder="Configuration key"
+          required
           onChange={(e) => setKey(e.target.value)}
         />
         <input
           className="w-full rounded border px-3 py-2 text-sm"
           value={value}
+          placeholder="Configuration value"
+          required
           onChange={(e) => setValue(e.target.value)}
         />
         <button className="rounded bg-emerald-700 px-3 py-2 text-sm text-white">

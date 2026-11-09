@@ -50,6 +50,12 @@ abstract class AuthStoreBase with Store, Lifecycle {
   @observable
   String? error;
 
+  @observable
+  bool emailVerificationRequired = false;
+
+  @observable
+  bool verificationLinkSent = false;
+
   @computed
   String? get emailError => submitted ? Validation.email(email) : null;
 
@@ -65,6 +71,8 @@ abstract class AuthStoreBase with Store, Lifecycle {
     if (isDisposed || status == LoadStatus.loading) return;
     email = value;
     error = null;
+    emailVerificationRequired = false;
+    verificationLinkSent = false;
   }
 
   @action
@@ -72,6 +80,8 @@ abstract class AuthStoreBase with Store, Lifecycle {
     if (isDisposed || status == LoadStatus.loading) return;
     password = value;
     error = null;
+    emailVerificationRequired = false;
+    verificationLinkSent = false;
   }
 
   @action
@@ -91,6 +101,8 @@ abstract class AuthStoreBase with Store, Lifecycle {
 
     status = LoadStatus.loading;
     error = null;
+    emailVerificationRequired = false;
+    verificationLinkSent = false;
 
     final request = beginRequest();
 
@@ -112,6 +124,8 @@ abstract class AuthStoreBase with Store, Lifecycle {
           case Failure(:final error):
             status = LoadStatus.error;
             this.error = error.message;
+            emailVerificationRequired =
+                error.kind == FailureKind.emailVerificationRequired;
             return false;
         }
       });
@@ -125,6 +139,35 @@ abstract class AuthStoreBase with Store, Lifecycle {
         return false;
       });
     }
+  }
+
+  @action
+  Future<bool> resendVerificationEmail() async {
+    if (isDisposed || status == LoadStatus.loading) return false;
+    final validationError = Validation.email(email);
+    if (validationError != null) {
+      error = validationError;
+      return false;
+    }
+    status = LoadStatus.loading;
+    error = null;
+    verificationLinkSent = false;
+    final request = beginRequest();
+    final result = await _repository.resendEmailVerification(email.trim());
+    if (!isCurrent(request) || isDisposed) return false;
+    return runInAction(() {
+      switch (result) {
+        case Success():
+          status = LoadStatus.success;
+          emailVerificationRequired = false;
+          verificationLinkSent = true;
+          return true;
+        case Failure(:final error):
+          status = LoadStatus.error;
+          this.error = error.message;
+          return false;
+      }
+    });
   }
 
   @override
